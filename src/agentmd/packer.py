@@ -1,0 +1,149 @@
+"""Agent context pack generation."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from agentmd.chunker import chunk_markdown, write_chunks
+from agentmd.frontmatter import add_frontmatter
+from agentmd.models import ConvertResult, DocumentMetadata
+from agentmd.registry import ensure_registry_loaded, get_converter, supported_extensions
+
+
+def generate_claude_md(docs_metadata: list[DocumentMetadata]) -> str:
+    """Generate a CLAUDE.md file with agent instructions based on converted docs."""
+    lines = [
+        "# Project Context",
+        "",
+        "This directory contains documentation converted by agentmd for use as AI agent context.",
+        "",
+        "## Available Documents",
+        "",
+    ]
+    for meta in docs_metadata:
+        tokens = f" (~{meta.tokens_estimate} tokens)" if meta.tokens_estimate else ""
+        lines.append(f"- **{meta.title}** ({meta.format}){tokens}")
+
+    lines.extend([
+        "",
+        "## Usage",
+        "",
+        "Read the documents in `docs/` for project context. "
+        "See `manifest.json` for a full listing.",
+    ])
+    return "\n".join(lines) + "\n"
+
+
+def generate_project_context(docs_metadata: list[DocumentMetadata]) -> str:
+    """Generate a PROJECT_CONTEXT.md summary."""
+    lines = [
+        "# Project Documentation Summary",
+        "",
+        f"Total documents: {len(docs_metadata)}",
+        f"Total estimated tokens: {sum(m.tokens_estimate for m in docs_metadata)}",
+        "",
+        "## Documents",
+        "",
+    ]
+    for meta in docs_metadata:
+        lines.append(f"### {meta.title}")
+        lines.append(f"- Source: `{meta.source}`")
+        lines.append(f"- Format: {meta.format}")
+        if meta.pages:
+            lines.append(f"- Pages: {meta.pages}")
+        if meta.headings:
+            lines.append(f"- Headings: {len(meta.headings)}")
+        if meta.tables:
+            lines.append(f"- Tables: {meta.tables}")
+        lines.append(f"- Tokens: {meta.tokens_estimate}")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def generate_manifest(
+    docs_metadata: list[DocumentMetadata], output_files: list[str]
+) -> str:
+    """Generate a manifest.json for the agent context pack."""
+    manifest = {
+        "version": "1.0",
+        "generator": "agentmd",
+        "documents": [m.to_dict() for m in docs_metadata],
+        "output_files": output_files,
+        "total_tokens": sum(m.tokens_estimate for m in docs_metadata),
+    }
+    return json.dumps(manifest, indent=2) + "\n"
+
+
+def pack_context(
+    source_dir: Path,
+    output_dir: Path,
+    chunk_size: int = 500,
+    chunk_by: str = "heading",
+) -> Path:
+    """Orchestrate full pipeline: convert all docs, chunk, and generate agent context pack."""
+    ensure_registry_loaded()
+    exts = set(supported_extensions())
+    docs_dir = output_dir / "docs"
+    docs_dir.mkdir(parents=True, exist_ok=True)
+
+    results: list[ConvertResult] = []
+    all_output_files: list[str] = []
+
+    # Find and convert all supported files
+    source_files = sorted(
+        f for f in source_dir.rglob("*") if f.is_file() and f.suffix.lower() in exts
+    )
+
+    # Check for stem collisions — multiple files that would map to the same .md output
+    stems: dict[str, list[Path]] = {}
+    for f in source_files:
+        stems.setdefault(f.stem, []).append(f)
+    collisions = {stem: paths for stem, paths in stems.items() if len(paths) > 1}
+    if collisions:
+        lines = ["Multiple source files share the same name (stem) and would overwrite each other:"]
+        for stem, paths in collisions.items():
+            names = ", ".join(str(p) for p in paths)
+            lines.append(f"  '{stem}' → {names}")
+        lines.append("Rename the conflicting files so each has a unique name (ignoring extension).")
+        raise ValueError("\n".join(lines))
+
+    for source_file in source_files:
+        ext = source_file.suffix.lower()
+        converter = get_converter(ext)
+        result = converter.convert(source_file)
+        results.append(result)
+
+        # Add frontmatter and write converted markdown
+        md_with_frontmatter = add_frontmatter(result.content, result.metadata.to_dict())
+        out_name = source_file.stem + ".md"
+        out_path = docs_dir / out_name
+        out_path.write_text(md_with_frontmatter, encoding="utf-8")
+        all_output_files.append(f"docs/{out_name}")
+
+        # Chunk if content is large enough
+        chunk_result = chunk_markdown(result.content, result.metadata, chunk_by, chunk_size)
+        if len(chunk_result.chunks) > 1:
+            chunk_paths = write_chunks(
+                chunk_result.chunks, source_file, docs_dir
+            )
+            for cp in chunk_paths:
+                all_output_files.append(f"docs/{cp.name}")
+
+    # Generate meta files
+    all_metadata = [r.metadata for r in results]
+
+    claude_md = generate_claude_md(all_metadata)
+    (output_dir / "CLAUDE.md").write_text(claude_md, encoding="utf-8")
+    all_output_files.append("CLAUDE.md")
+
+    project_ctx = generate_project_context(all_metadata)
+    (output_dir / "PROJECT_CONTEXT.md").write_text(project_ctx, encoding="utf-8")
+    all_output_files.append("PROJECT_CONTEXT.md")
+
+    manifest = generate_manifest(all_metadata, all_output_files)
+    (output_dir / "manifest.json").write_text(manifest, encoding="utf-8")
+    all_output_files.append("manifest.json")
+
+    return output_dir
