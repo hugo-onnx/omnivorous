@@ -7,12 +7,12 @@ from agentmd.converters.txt import TxtConverter
 
 def test_convert_txt(fixtures_dir: Path):
     converter = TxtConverter()
-    result = converter.convert(fixtures_dir / "sample.txt")
+    result = converter.convert(fixtures_dir / "notes.txt")
 
-    assert result.content.startswith("# sample")
+    assert result.content.startswith("# notes")
     assert "plain text document" in result.content
     assert result.metadata.format == "txt"
-    assert result.metadata.title == "sample"
+    assert result.metadata.title == "notes"
     assert result.metadata.tokens_estimate > 0
 
 
