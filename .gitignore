@@ -209,3 +209,5 @@ __marimo__/
 # Project
 .DS_Store
 agent-context/
+test-docs/
+test-context/
