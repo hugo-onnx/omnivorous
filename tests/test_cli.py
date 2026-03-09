@@ -1,0 +1,104 @@
+"""CLI integration tests using Typer's CliRunner."""
+
+from pathlib import Path
+
+from typer.testing import CliRunner
+
+from agentmd.cli import app
+
+runner = CliRunner()
+
+
+def test_help():
+    result = runner.invoke(app, ["--help"])
+    assert result.exit_code == 0
+    assert "convert" in result.output
+    assert "ingest" in result.output
+    assert "chunk" in result.output
+    assert "inspect" in result.output
+    assert "pack" in result.output
+
+
+def test_convert_txt(fixtures_dir: Path):
+    result = runner.invoke(app, ["convert", str(fixtures_dir / "sample.txt")])
+    assert result.exit_code == 0
+    assert "sample" in result.output
+
+
+def test_convert_markdown(fixtures_dir: Path):
+    result = runner.invoke(app, ["convert", str(fixtures_dir / "sample.md")])
+    assert result.exit_code == 0
+    assert "Sample Document" in result.output
+
+
+def test_convert_html(fixtures_dir: Path):
+    result = runner.invoke(app, ["convert", str(fixtures_dir / "sample.html")])
+    assert result.exit_code == 0
+
+
+def test_convert_with_output(fixtures_dir: Path, tmp_path: Path):
+    out = tmp_path / "result.md"
+    result = runner.invoke(
+        app, ["convert", str(fixtures_dir / "sample.md"), "-o", str(out)]
+    )
+    assert result.exit_code == 0
+    assert out.exists()
+    content = out.read_text()
+    assert "---" in content  # frontmatter
+    assert "Sample Document" in content
+
+
+def test_convert_missing_file():
+    result = runner.invoke(app, ["convert", "nonexistent.pdf"])
+    assert result.exit_code == 1
+
+
+def test_convert_unsupported_format(tmp_path: Path):
+    f = tmp_path / "test.xyz"
+    f.write_text("content")
+    result = runner.invoke(app, ["convert", str(f)])
+    assert result.exit_code == 1
+
+
+def test_ingest(fixtures_dir: Path, tmp_path: Path):
+    out = tmp_path / "output"
+    result = runner.invoke(app, ["ingest", str(fixtures_dir), "-o", str(out)])
+    assert result.exit_code == 0
+    assert out.is_dir()
+    assert any(out.iterdir())
+
+
+def test_ingest_not_a_directory(tmp_path: Path):
+    f = tmp_path / "file.txt"
+    f.write_text("x")
+    result = runner.invoke(app, ["ingest", str(f)])
+    assert result.exit_code == 1
+
+
+def test_chunk(fixtures_dir: Path, tmp_path: Path):
+    out = tmp_path / "chunks"
+    result = runner.invoke(
+        app,
+        ["chunk", str(fixtures_dir / "sample.md"), "--chunk-size", "100", "-o", str(out)],
+    )
+    assert result.exit_code == 0
+    assert out.is_dir()
+
+
+def test_inspect_txt(fixtures_dir: Path):
+    result = runner.invoke(app, ["inspect", str(fixtures_dir / "sample.txt")])
+    assert result.exit_code == 0
+
+
+def test_inspect_missing():
+    result = runner.invoke(app, ["inspect", "nonexistent.txt"])
+    assert result.exit_code == 1
+
+
+def test_pack(fixtures_dir: Path, tmp_path: Path):
+    out = tmp_path / "agent-ctx"
+    result = runner.invoke(app, ["pack", str(fixtures_dir), "-o", str(out)])
+    assert result.exit_code == 0
+    assert (out / "CLAUDE.md").exists()
+    assert (out / "PROJECT_CONTEXT.md").exists()
+    assert (out / "manifest.json").exists()
