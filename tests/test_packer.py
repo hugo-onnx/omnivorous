@@ -3,6 +3,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from agentmd.models import DocumentMetadata
 from agentmd.packer import (
     generate_claude_md,
@@ -52,3 +54,15 @@ def test_pack_context(fixtures_dir: Path, tmp_path: Path):
     manifest = json.loads((out / "manifest.json").read_text())
     assert len(manifest["documents"]) > 0
     assert manifest["total_tokens"] > 0
+
+
+def test_pack_context_rejects_stem_collisions(tmp_path: Path):
+    """Files with the same stem but different extensions should be rejected."""
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "readme.md").write_text("# Hello")
+    (source / "readme.txt").write_text("Hello")
+
+    out = tmp_path / "out"
+    with pytest.raises(ValueError, match="same name"):
+        pack_context(source, out)
