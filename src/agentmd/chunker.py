@@ -64,10 +64,12 @@ def chunk_markdown(
     else:
         # heading-first with token fallback
         heading_chunks = chunk_by_headings(content)
+        no_headings_found = len(heading_chunks) == 1
         chunks = []
         for chunk in heading_chunks:
             if count_tokens(chunk) > chunk_size:
-                chunks.extend(chunk_by_tokens(chunk, chunk_size))
+                fallback_size = max(chunk_size, 4000) if no_headings_found else chunk_size
+                chunks.extend(chunk_by_tokens(chunk, fallback_size))
             else:
                 chunks.append(chunk)
 
