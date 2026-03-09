@@ -1,4 +1,4 @@
-# agentmd
+# omnivorous
 
 ![omni](images/omni.jpg)
 
