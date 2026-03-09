@@ -14,32 +14,31 @@ def test_help():
     assert result.exit_code == 0
     assert "convert" in result.output
     assert "ingest" in result.output
-    assert "chunk" in result.output
     assert "inspect" in result.output
     assert "pack" in result.output
 
 
 def test_convert_txt(fixtures_dir: Path):
-    result = runner.invoke(app, ["convert", str(fixtures_dir / "sample.txt")])
+    result = runner.invoke(app, ["convert", str(fixtures_dir / "notes.txt")])
     assert result.exit_code == 0
-    assert "sample" in result.output
+    assert "notes" in result.output
 
 
 def test_convert_markdown(fixtures_dir: Path):
-    result = runner.invoke(app, ["convert", str(fixtures_dir / "sample.md")])
+    result = runner.invoke(app, ["convert", str(fixtures_dir / "readme.md")])
     assert result.exit_code == 0
     assert "Sample Document" in result.output
 
 
 def test_convert_html(fixtures_dir: Path):
-    result = runner.invoke(app, ["convert", str(fixtures_dir / "sample.html")])
+    result = runner.invoke(app, ["convert", str(fixtures_dir / "web.html")])
     assert result.exit_code == 0
 
 
 def test_convert_with_output(fixtures_dir: Path, tmp_path: Path):
     out = tmp_path / "result.md"
     result = runner.invoke(
-        app, ["convert", str(fixtures_dir / "sample.md"), "-o", str(out)]
+        app, ["convert", str(fixtures_dir / "readme.md"), "-o", str(out)]
     )
     assert result.exit_code == 0
     assert out.exists()
@@ -75,18 +74,8 @@ def test_ingest_not_a_directory(tmp_path: Path):
     assert result.exit_code == 1
 
 
-def test_chunk(fixtures_dir: Path, tmp_path: Path):
-    out = tmp_path / "chunks"
-    result = runner.invoke(
-        app,
-        ["chunk", str(fixtures_dir / "sample.md"), "--chunk-size", "100", "-o", str(out)],
-    )
-    assert result.exit_code == 0
-    assert out.is_dir()
-
-
 def test_inspect_txt(fixtures_dir: Path):
-    result = runner.invoke(app, ["inspect", str(fixtures_dir / "sample.txt")])
+    result = runner.invoke(app, ["inspect", str(fixtures_dir / "notes.txt")])
     assert result.exit_code == 0
 
 
