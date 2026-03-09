@@ -32,9 +32,9 @@ def sample_pdf(tmp_path: Path) -> Path:
 @pytest.fixture
 def sample_pdf_with_text(fixtures_dir: Path) -> Path:
     """Return path to the pre-built PDF fixture if it exists, else skip."""
-    p = fixtures_dir / "sample.pdf"
+    p = fixtures_dir / "document.pdf"
     if not p.exists():
-        pytest.skip("sample.pdf fixture not available")
+        pytest.skip("document.pdf fixture not available")
     return p
 
 
