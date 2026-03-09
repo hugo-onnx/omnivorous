@@ -27,9 +27,6 @@ agentmd inspect document.pdf
 # Convert a single file
 agentmd convert document.pdf -o output.md
 
-# Chunk a markdown file
-agentmd chunk output.md --chunk-size 500
-
 # Use a different token encoding (default: o200k_base)
 agentmd inspect document.pdf --encoding cl100k_base
 agentmd convert document.pdf --encoding cl100k_base -o output.md
@@ -78,15 +75,6 @@ Options:
 Display document metadata: pages, headings, tables, token count, and encoding.
 
 Options:
-- `--encoding`: Tiktoken encoding name (default: `o200k_base`)
-
-### `agentmd chunk <file>`
-Split a Markdown file into chunks by heading or token count.
-
-Options:
-- `--chunk-size`: Target chunk size in tokens (default: 500)
-- `--chunk-by`: Strategy — `heading` or `tokens` (default: heading)
-- `-o, --output`: Output directory
 - `--encoding`: Tiktoken encoding name (default: `o200k_base`)
 
 ## Token Encoding
