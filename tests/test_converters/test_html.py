@@ -7,7 +7,7 @@ from agentmd.converters.html import HtmlConverter
 
 def test_convert_html(fixtures_dir: Path):
     converter = HtmlConverter()
-    result = converter.convert(fixtures_dir / "sample.html")
+    result = converter.convert(fixtures_dir / "web.html")
 
     assert result.metadata.format == "html"
     assert result.metadata.title == "Sample HTML Document"
