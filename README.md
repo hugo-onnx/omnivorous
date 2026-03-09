@@ -6,6 +6,10 @@ Locally feed your agents
 The ingestion layer for AI agents
 The context compiler for AI agents
 
+---
+
+![omni](images/omni.jpg)
+
 ## Install
 
 ```bash
