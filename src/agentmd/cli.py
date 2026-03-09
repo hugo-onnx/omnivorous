@@ -124,48 +124,6 @@ def ingest(
 
 
 @app.command()
-def chunk(
-    file: Path = typer.Argument(..., help="File to chunk (any supported format)."),
-    chunk_size: int = typer.Option(500, "--chunk-size", help="Target chunk size in tokens."),
-    chunk_by: str = typer.Option("heading", "--chunk-by", help="Strategy: heading or tokens."),
-    output: Optional[Path] = typer.Option(None, "-o", "--output", help="Output directory."),
-    encoding: str = typer.Option("o200k_base", "--encoding", help="Tiktoken encoding name."),
-) -> None:
-    """Split a file into chunks. Converts non-Markdown formats first."""
-    from agentmd.chunker import chunk_markdown, write_chunks
-    from agentmd.registry import ensure_registry_loaded, get_converter
-
-    _apply_encoding(encoding)
-    ensure_registry_loaded()
-
-    if not file.exists():
-        print_error(f"File not found: {file}")
-        raise typer.Exit(1)
-
-    ext = file.suffix.lower()
-    try:
-        converter = get_converter(ext)
-    except ValueError:
-        print_error(f"Unsupported format: {ext}")
-        raise typer.Exit(1)
-
-    with get_progress() as progress:
-        progress.add_task(f"Converting {file.name}...", total=None)
-        convert_result = converter.convert(file)
-
-    content = convert_result.content
-    metadata = convert_result.metadata
-
-    result = chunk_markdown(content, metadata, strategy=chunk_by, chunk_size=chunk_size)
-    out_dir = output or Path("output")
-    paths = write_chunks(result.chunks, file, out_dir)
-
-    print_success(f"Created {len(paths)} chunk(s) in {out_dir}/")
-    for p in paths:
-        print_info(f"  {p.name}")
-
-
-@app.command()
 def inspect(
     file: Path = typer.Argument(..., help="File to inspect."),
     encoding: str = typer.Option("o200k_base", "--encoding", help="Tiktoken encoding name."),
