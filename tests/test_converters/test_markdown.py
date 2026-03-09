@@ -7,7 +7,7 @@ from agentmd.converters.markdown import MarkdownConverter
 
 def test_convert_markdown(fixtures_dir: Path):
     converter = MarkdownConverter()
-    result = converter.convert(fixtures_dir / "sample.md")
+    result = converter.convert(fixtures_dir / "readme.md")
 
     assert "# Sample Document" in result.content
     assert result.metadata.format == "markdown"
