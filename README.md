@@ -1,14 +1,12 @@
 # agentmd
 
+![omni](images/omni.jpg)
+
 Convert documents into agent-ready Markdown context for AI coding agents.
 All documents, AI ready
 Locally feed your agents
 The ingestion layer for AI agents
 The context compiler for AI agents
-
----
-
-![omni](images/omni.jpg)
 
 ## Install
 
