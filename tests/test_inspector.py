@@ -6,7 +6,7 @@ from agentmd.inspector import inspect_file
 
 
 def test_inspect_markdown(fixtures_dir: Path):
-    meta = inspect_file(fixtures_dir / "sample.md")
+    meta = inspect_file(fixtures_dir / "readme.md")
     assert meta.format == "markdown"
     assert meta.title == "Sample Document"
     assert len(meta.headings) >= 2
@@ -14,13 +14,13 @@ def test_inspect_markdown(fixtures_dir: Path):
 
 
 def test_inspect_html(fixtures_dir: Path):
-    meta = inspect_file(fixtures_dir / "sample.html")
+    meta = inspect_file(fixtures_dir / "web.html")
     assert meta.format == "html"
     assert meta.tables == 1
 
 
 def test_inspect_txt(fixtures_dir: Path):
-    meta = inspect_file(fixtures_dir / "sample.txt")
+    meta = inspect_file(fixtures_dir / "notes.txt")
     assert meta.format == "txt"
     assert meta.tokens_estimate > 0
 
