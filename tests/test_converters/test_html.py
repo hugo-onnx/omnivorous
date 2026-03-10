@@ -19,3 +19,22 @@ def test_convert_html(fixtures_dir: Path):
 
 def test_html_name():
     assert HtmlConverter().name == "HTML"
+
+
+def test_heading_link_stripped(tmp_path: Path):
+    html = "<html><body><h1><a href='/url'>Linked Title</a></h1><p>Body.</p></body></html>"
+    f = tmp_path / "links.html"
+    f.write_text(html, encoding="utf-8")
+    result = HtmlConverter().convert(f)
+    assert "Linked Title" in result.metadata.headings
+    # The heading text should not contain markdown link syntax
+    for h in result.metadata.headings:
+        assert "](/" not in h
+
+
+def test_curly_quotes_normalized_html(tmp_path: Path):
+    html = "<html><body><h2>The \u2018Smart\u2019 Way</h2><p>Content.</p></body></html>"
+    f = tmp_path / "quotes.html"
+    f.write_text(html, encoding="utf-8")
+    result = HtmlConverter().convert(f)
+    assert "The 'Smart' Way" in result.metadata.headings
