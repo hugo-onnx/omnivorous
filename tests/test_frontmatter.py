@@ -1,6 +1,6 @@
 """Tests for frontmatter utilities."""
 
-from agentmd.frontmatter import add_frontmatter, parse_frontmatter
+from omnivorous.frontmatter import add_frontmatter, parse_frontmatter
 
 
 def test_add_frontmatter():
