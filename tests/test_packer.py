@@ -54,6 +54,7 @@ def test_pack_context(fixtures_dir: Path, tmp_path: Path):
     manifest = json.loads((out / "manifest.json").read_text())
     assert len(manifest["documents"]) > 0
     assert manifest["total_tokens"] > 0
+    assert "manifest.json" in manifest["output_files"]
 
 
 def test_pack_context_rejects_stem_collisions(tmp_path: Path):
