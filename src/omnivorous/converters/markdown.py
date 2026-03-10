@@ -5,9 +5,9 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from agentmd.converters.base import BaseConverter
-from agentmd.models import ConvertResult, DocumentMetadata
-from agentmd.tokens import count_tokens, get_encoding_name
+from omnivorous.converters.base import BaseConverter
+from omnivorous.models import ConvertResult, DocumentMetadata
+from omnivorous.tokens import count_tokens, get_encoding_name
 
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.+)$", re.MULTILINE)
 _SETEXT_RE = re.compile(r"^(.+)\n(=+|-+)\s*$", re.MULTILINE)
@@ -44,7 +44,7 @@ class MarkdownConverter(BaseConverter):
         title = headings[0] if headings else path.stem
 
         metadata = DocumentMetadata(
-            source=str(path),
+            source=path.name,
             format="markdown",
             title=title,
             headings=headings,
