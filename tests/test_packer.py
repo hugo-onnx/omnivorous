@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from agentmd.models import DocumentMetadata
-from agentmd.agents import AGENT_TARGETS
-from agentmd.packer import (
+from omnivorous.models import DocumentMetadata
+from omnivorous.agents import AGENT_TARGETS
+from omnivorous.packer import (
     generate_agent_instructions,
     generate_claude_md,
     generate_manifest,
@@ -39,7 +39,7 @@ def test_generate_manifest():
     result = generate_manifest([_meta()], ["docs/test.md"])
     data = json.loads(result)
     assert data["version"] == "1.0"
-    assert data["generator"] == "agentmd"
+    assert data["generator"] == "omnivorous"
     assert len(data["documents"]) == 1
     assert "docs/test.md" in data["output_files"]
 
@@ -104,7 +104,7 @@ def test_pack_context_cursor_agent(fixtures_dir: Path, tmp_path: Path):
     out = tmp_path / "agent-context"
     pack_context(fixtures_dir, out, agents=["cursor"])
 
-    assert (out / ".cursor" / "rules" / "agentmd.md").exists()
+    assert (out / ".cursor" / "rules" / "omnivorous.md").exists()
     assert not (out / "CLAUDE.md").exists()
 
 
@@ -112,7 +112,7 @@ def test_pack_context_antigravity_agent(fixtures_dir: Path, tmp_path: Path):
     out = tmp_path / "agent-context"
     pack_context(fixtures_dir, out, agents=["antigravity"])
 
-    assert (out / ".agent" / "skills" / "agentmd.md").exists()
+    assert (out / ".agent" / "skills" / "omnivorous.md").exists()
 
 
 def test_pack_context_multiple_agents(fixtures_dir: Path, tmp_path: Path):
@@ -133,9 +133,9 @@ def test_pack_context_all_agents(fixtures_dir: Path, tmp_path: Path):
 
     assert (out / "CLAUDE.md").exists()
     assert (out / "AGENTS.md").exists()
-    assert (out / ".cursor" / "rules" / "agentmd.md").exists()
+    assert (out / ".cursor" / "rules" / "omnivorous.md").exists()
     assert (out / ".github" / "copilot-instructions.md").exists()
-    assert (out / ".agent" / "skills" / "agentmd.md").exists()
+    assert (out / ".agent" / "skills" / "omnivorous.md").exists()
 
     manifest = json.loads((out / "manifest.json").read_text())
     assert len(manifest["output_files"]) >= len(AGENT_TARGETS)
