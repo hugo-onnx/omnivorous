@@ -7,9 +7,9 @@ from pathlib import Path
 from docx import Document
 from docx.table import Table
 
-from agentmd.converters.base import BaseConverter
-from agentmd.models import ConvertResult, DocumentMetadata
-from agentmd.tokens import count_tokens, get_encoding_name
+from omnivorous.converters.base import BaseConverter
+from omnivorous.models import ConvertResult, DocumentMetadata
+from omnivorous.tokens import count_tokens, get_encoding_name
 
 _HEADING_MAP = {
     "Heading 1": "#",
@@ -78,7 +78,7 @@ class DocxConverter(BaseConverter):
 
         content = "\n\n".join(parts)
         metadata = DocumentMetadata(
-            source=str(path),
+            source=path.name,
             format="docx",
             title=path.stem,
             headings=headings,
