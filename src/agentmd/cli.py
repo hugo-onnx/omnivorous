@@ -174,8 +174,12 @@ def pack(
     chunk_size: int = typer.Option(500, "--chunk-size", help="Target chunk size in tokens."),
     chunk_by: str = typer.Option("heading", "--chunk-by", help="Strategy: heading or tokens."),
     encoding: str = typer.Option("o200k_base", "--encoding", help="Tiktoken encoding name."),
+    agent: Optional[list[str]] = typer.Option(
+        None, "--agent", "-a", help="Target agent(s): claude, codex, cursor, copilot, antigravity, or all."
+    ),
 ) -> None:
     """Generate an agent context pack from a folder of documents."""
+    from agentmd.agents import resolve_agents
     from agentmd.packer import pack_context
 
     _apply_encoding(encoding)
@@ -184,18 +188,26 @@ def pack(
         print_error(f"Not a directory: {folder}")
         raise typer.Exit(1)
 
+    agent_names = agent or ["claude"]
+    try:
+        resolved = resolve_agents(agent_names)
+    except ValueError as exc:
+        print_error(str(exc))
+        raise typer.Exit(1)
+
     out_dir = output or Path("agent-context")
 
     with get_progress() as progress:
         progress.add_task("Packing agent context...", total=None)
         try:
-            pack_context(folder, out_dir, chunk_size=chunk_size, chunk_by=chunk_by)
+            pack_context(folder, out_dir, chunk_size=chunk_size, chunk_by=chunk_by, agents=agent_names)
         except ValueError as exc:
             print_error(str(exc))
             raise typer.Exit(1)
 
     print_success(f"Agent context pack created in {out_dir}/")
-    print_info("  CLAUDE.md — agent instructions")
+    for a in resolved:
+        print_info(f"  {a.file_path} — {a.display_name} instructions")
     print_info("  PROJECT_CONTEXT.md — documentation summary")
     print_info("  manifest.json — file manifest")
     print_info("  docs/ — converted documents")
