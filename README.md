@@ -17,8 +17,18 @@ pip install agentmd
 ## Quick Start
 
 ```bash
-# Generate a full agent context pack
+# Generate a full agent context pack (defaults to Claude Code)
 agentmd pack docs/ -o agent-context/
+
+# Generate for a specific agent
+agentmd pack docs/ --agent codex
+agentmd pack docs/ --agent cursor
+
+# Generate for multiple agents at once
+agentmd pack docs/ --agent claude --agent codex --agent copilot
+
+# Generate for all supported agents
+agentmd pack docs/ --agent all
 
 # Convert all files in a folder
 agentmd ingest docs/ -o output/
@@ -48,16 +58,29 @@ All commands accept `--encoding` to select the tiktoken encoding used for token 
 
 ### `agentmd pack <folder>`
 Generate a full agent context pack with:
-- `CLAUDE.md` — Agent instructions
+- Agent instruction file (varies by target agent)
 - `PROJECT_CONTEXT.md` — Documentation summary
 - `manifest.json` — File manifest
 - `docs/` — Converted and chunked documents
 
 Options:
 - `-o, --output`: Output directory for agent context
+- `-a, --agent`: Target agent(s) — can be specified multiple times (default: `claude`)
 - `--chunk-size`: Target chunk size in tokens (default: 500)
 - `--chunk-by`: Strategy — `heading` or `tokens` (default: heading)
 - `--encoding`: Tiktoken encoding name (default: `o200k_base`)
+
+#### Supported Agents
+
+| Agent | Key | Generated File |
+|-------|-----|----------------|
+| Claude Code | `claude` | `CLAUDE.md` |
+| Codex CLI | `codex` | `AGENTS.md` |
+| Cursor | `cursor` | `.cursor/rules/agentmd.md` |
+| GitHub Copilot | `copilot` | `.github/copilot-instructions.md` |
+| Google Antigravity | `antigravity` | `.agent/skills/agentmd.md` |
+
+Use `--agent all` to generate instruction files for every supported agent at once.
 
 ### `agentmd ingest <folder>`
 Scan a folder and convert all supported documents.
