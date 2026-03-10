@@ -1,4 +1,4 @@
-"""Data models for agentmd."""
+"""Data models for omnivorous."""
 
 from __future__ import annotations
 
