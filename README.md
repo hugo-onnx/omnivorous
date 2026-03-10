@@ -1,47 +1,43 @@
 # omnivorous
 
-![omni](images/omni.jpg)
+![omni](images/omni.png)
 
 Convert documents into agent-ready Markdown context for AI coding agents.
-All documents, AI ready
-Locally feed your agents
-The ingestion layer for AI agents
-The context compiler for AI agents
 
 ## Install
 
 ```bash
-pip install agentmd
+pip install omnivorous
 ```
 
 ## Quick Start
 
 ```bash
 # Generate a full agent context pack (defaults to Claude Code)
-agentmd pack docs/ -o agent-context/
+omni pack docs/ -o agent-context/
 
 # Generate for a specific agent
-agentmd pack docs/ --agent codex
-agentmd pack docs/ --agent cursor
+omni pack docs/ --agent codex
+omni pack docs/ --agent cursor
 
 # Generate for multiple agents at once
-agentmd pack docs/ --agent claude --agent codex --agent copilot
+omni pack docs/ --agent claude --agent codex --agent copilot
 
 # Generate for all supported agents
-agentmd pack docs/ --agent all
+omni pack docs/ --agent all
 
 # Convert all files in a folder
-agentmd ingest docs/ -o output/
+omni ingest docs/ -o output/
 
 # Inspect a document
-agentmd inspect document.pdf
+omni inspect document.pdf
 
 # Convert a single file
-agentmd convert document.pdf -o output.md
+omni convert document.pdf -o output.md
 
 # Use a different token encoding (default: o200k_base)
-agentmd inspect document.pdf --encoding cl100k_base
-agentmd convert document.pdf --encoding cl100k_base -o output.md
+omni inspect document.pdf --encoding cl100k_base
+omni convert document.pdf --encoding cl100k_base -o output.md
 ```
 
 ## Supported Formats
@@ -56,7 +52,7 @@ agentmd convert document.pdf --encoding cl100k_base -o output.md
 
 All commands accept `--encoding` to select the tiktoken encoding used for token counting (default: `o200k_base`).
 
-### `agentmd pack <folder>`
+### `omni pack <folder>`
 Generate a full agent context pack with:
 - Agent instruction file (varies by target agent)
 - `PROJECT_CONTEXT.md` — Documentation summary
@@ -76,27 +72,27 @@ Options:
 |-------|-----|----------------|
 | Claude Code | `claude` | `CLAUDE.md` |
 | Codex CLI | `codex` | `AGENTS.md` |
-| Cursor | `cursor` | `.cursor/rules/agentmd.md` |
+| Cursor | `cursor` | `.cursor/rules/omnivorous.md` |
 | GitHub Copilot | `copilot` | `.github/copilot-instructions.md` |
-| Google Antigravity | `antigravity` | `.agent/skills/agentmd.md` |
+| Google Antigravity | `antigravity` | `.agent/skills/omnivorous.md` |
 
 Use `--agent all` to generate instruction files for every supported agent at once.
 
-### `agentmd ingest <folder>`
+### `omni ingest <folder>`
 Scan a folder and convert all supported documents.
 
 Options:
 - `-o, --output`: Output directory
 - `--encoding`: Tiktoken encoding name (default: `o200k_base`)
 
-### `agentmd convert <file>`
+### `omni convert <file>`
 Convert a single document to Markdown with YAML frontmatter.
 
 Options:
 - `-o, --output`: Output file path
 - `--encoding`: Tiktoken encoding name (default: `o200k_base`)
 
-### `agentmd inspect <file>`
+### `omni inspect <file>`
 Display document metadata: pages, headings, tables, token count, and encoding.
 
 Options:
@@ -104,7 +100,7 @@ Options:
 
 ## Token Encoding
 
-Token counts vary across models because each uses a different tokenizer. By default, agentmd uses `o200k_base` (GPT-4o, o1, o3). You can switch to `cl100k_base` (GPT-4 / GPT-3.5) with the `--encoding` flag.
+Token counts vary across models because each uses a different tokenizer. By default, omnivorous uses `o200k_base` (GPT-4o, o1, o3). You can switch to `cl100k_base` (GPT-4 / GPT-3.5) with the `--encoding` flag.
 
 Supported encodings:
 - `o200k_base` — GPT-4o, o1, o3 (default)
