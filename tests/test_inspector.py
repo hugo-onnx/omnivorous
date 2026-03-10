@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from agentmd.inspector import inspect_file
+from omnivorous.inspector import inspect_file
 
 
 def test_inspect_markdown(fixtures_dir: Path):
