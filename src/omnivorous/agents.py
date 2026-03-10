@@ -19,8 +19,8 @@ AGENT_TARGETS: dict[str, AgentTarget] = {
     "claude": AgentTarget("claude", "Claude Code", "CLAUDE.md"),
     "codex": AgentTarget("codex", "Codex CLI", "AGENTS.md"),
     "copilot": AgentTarget("copilot", "GitHub Copilot", ".github/copilot-instructions.md"),
-    "cursor": AgentTarget("cursor", "Cursor", ".cursor/rules/agentmd.md"),
-    "antigravity": AgentTarget("antigravity", "Google Antigravity", ".agent/skills/agentmd.md"),
+    "cursor": AgentTarget("cursor", "Cursor", ".cursor/rules/omnivorous.md"),
+    "antigravity": AgentTarget("antigravity", "Google Antigravity", ".agent/skills/omnivorous.md"),
 }
 
 DEFAULT_AGENT = "claude"
