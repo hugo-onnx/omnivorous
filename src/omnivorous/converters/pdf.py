@@ -8,9 +8,9 @@ from pathlib import Path
 
 from pypdf import PdfReader
 
-from agentmd.converters.base import BaseConverter
-from agentmd.models import ConvertResult, DocumentMetadata
-from agentmd.tokens import count_tokens, get_encoding_name
+from omnivorous.converters.base import BaseConverter
+from omnivorous.models import ConvertResult, DocumentMetadata
+from omnivorous.tokens import count_tokens, get_encoding_name
 
 _LIGATURES = {
     "\ufb00": "ff", "\ufb01": "fi", "\ufb02": "fl",
@@ -71,7 +71,7 @@ class PdfConverter(BaseConverter):
         content = "\n\n".join(pages)
 
         metadata = DocumentMetadata(
-            source=str(path),
+            source=path.name,
             format="pdf",
             title=path.stem,
             pages=len(reader.pages),
