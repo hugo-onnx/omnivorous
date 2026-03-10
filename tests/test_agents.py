@@ -2,7 +2,7 @@
 
 import pytest
 
-from agentmd.agents import AGENT_TARGETS, resolve_agents, supported_agents
+from omnivorous.agents import AGENT_TARGETS, resolve_agents, supported_agents
 
 
 def test_agent_target_fields():
