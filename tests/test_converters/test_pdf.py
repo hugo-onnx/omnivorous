@@ -3,7 +3,7 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from agentmd.converters.pdf import PdfConverter
+from omnivorous.converters.pdf import PdfConverter
 
 
 def test_convert_blank_pdf(sample_pdf: Path):
@@ -12,6 +12,7 @@ def test_convert_blank_pdf(sample_pdf: Path):
     result = converter.convert(sample_pdf)
 
     assert result.metadata.format == "pdf"
+    assert result.metadata.source == "sample.pdf"
     assert result.metadata.pages == 1
     assert result.metadata.title == "sample"
 
@@ -38,7 +39,7 @@ def _mock_reader(page_texts: list[str]):
 
 
 def test_pdf_ligature_normalization():
-    with patch("agentmd.converters.pdf.PdfReader") as mock_cls:
+    with patch("omnivorous.converters.pdf.PdfReader") as mock_cls:
         mock_cls.return_value = _mock_reader(["\ufb01nance and e\ufb03ciency"])
         result = PdfConverter().convert(Path("test.pdf"))
     assert "finance" in result.content
@@ -48,7 +49,7 @@ def test_pdf_ligature_normalization():
 
 
 def test_pdf_drop_cap_fix():
-    with patch("agentmd.converters.pdf.PdfReader") as mock_cls:
+    with patch("omnivorous.converters.pdf.PdfReader") as mock_cls:
         mock_cls.return_value = _mock_reader(["N\nIST Framework"])
         result = PdfConverter().convert(Path("test.pdf"))
     assert "NIST Framework" in result.content
@@ -62,7 +63,7 @@ def test_pdf_repeated_lines_stripped():
         f"{header}\nThird page content.",
         f"{header}\nFourth page content.",
     ]
-    with patch("agentmd.converters.pdf.PdfReader") as mock_cls:
+    with patch("omnivorous.converters.pdf.PdfReader") as mock_cls:
         mock_cls.return_value = _mock_reader(pages)
         result = PdfConverter().convert(Path("test.pdf"))
     assert "First page content." in result.content
