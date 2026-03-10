@@ -3,44 +3,6 @@ revision = 3
 requires-python = ">=3.11"
 
 [[package]]
-name = "agentmd"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "beautifulsoup4" },
-    { name = "markdownify" },
-    { name = "pypdf" },
-    { name = "python-docx" },
-    { name = "pyyaml" },
-    { name = "rich" },
-    { name = "tiktoken" },
-    { name = "typer" },
-]
-
-[package.optional-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "beautifulsoup4", specifier = ">=4.12,<5.0" },
-    { name = "markdownify", specifier = ">=0.11,<1.0" },
-    { name = "pypdf", specifier = ">=4.0,<6.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
-    { name = "python-docx", specifier = ">=1.0,<2.0" },
-    { name = "pyyaml", specifier = ">=6.0,<7.0" },
-    { name = "rich", specifier = ">=13.0,<15.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1" },
-    { name = "tiktoken", specifier = ">=0.5,<1.0" },
-    { name = "typer", specifier = ">=0.9,<1.0" },
-]
-provides-extras = ["dev"]
-
-[[package]]
 name = "annotated-doc"
 version = "0.0.4"
 source = { registry = "https://pypi.org/simple" }
@@ -422,6 +384,44 @@ sdist = { url = "https://files.pythonhosted.org/packages/d6/54/cfe61301667036ec9
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b3/38/89ba8ad64ae25be8de66a6d463314cf1eb366222074cfda9ee839c56a4b4/mdurl-0.1.2-py3-none-any.whl", hash = "sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8", size = 9979, upload-time = "2022-08-14T12:40:09.779Z" },
 ]
+
+[[package]]
+name = "omnivorous"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "beautifulsoup4" },
+    { name = "markdownify" },
+    { name = "pypdf" },
+    { name = "python-docx" },
+    { name = "pyyaml" },
+    { name = "rich" },
+    { name = "tiktoken" },
+    { name = "typer" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "beautifulsoup4", specifier = ">=4.12,<5.0" },
+    { name = "markdownify", specifier = ">=0.11,<1.0" },
+    { name = "pypdf", specifier = ">=4.0,<6.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
+    { name = "python-docx", specifier = ">=1.0,<2.0" },
+    { name = "pyyaml", specifier = ">=6.0,<7.0" },
+    { name = "rich", specifier = ">=13.0,<15.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1" },
+    { name = "tiktoken", specifier = ">=0.5,<1.0" },
+    { name = "typer", specifier = ">=0.9,<1.0" },
+]
+provides-extras = ["dev"]
 
 [[package]]
 name = "packaging"

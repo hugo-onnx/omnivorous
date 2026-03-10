@@ -3,13 +3,13 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "agentmd"
+name = "omnivorous"
 version = "0.1.0"
 description = "Convert documents into agent-ready Markdown context for AI coding agents"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
-authors = [{ name = "agentmd contributors" }]
+authors = [{ name = "omnivorous contributors" }]
 keywords = ["markdown", "ai", "agents", "documents", "converter"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -32,14 +32,19 @@ dependencies = [
     "pyyaml>=6.0,<7.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/hugo-onnx/omnivorous"
+Repository = "https://github.com/hugo-onnx/omnivorous"
+Issues = "https://github.com/hugo-onnx/omnivorous/issues"
+
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "pytest-cov>=4.0", "ruff>=0.1"]
 
 [project.scripts]
-agentmd = "agentmd.cli:app"
+omni = "omnivorous.cli:app"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/agentmd"]
+packages = ["src/omnivorous"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
