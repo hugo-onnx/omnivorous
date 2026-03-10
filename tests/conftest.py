@@ -16,7 +16,6 @@ def fixtures_dir() -> Path:
 def sample_pdf(tmp_path: Path) -> Path:
     """Create a minimal PDF fixture using pypdf."""
     from pypdf import PdfWriter
-    from pypdf.generic import NameObject, TextStringObject
 
     writer = PdfWriter()
     writer.add_blank_page(width=612, height=792)
