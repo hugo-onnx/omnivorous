@@ -5,8 +5,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from agentmd.models import ChunkResult, DocumentMetadata
-from agentmd.tokens import count_tokens
+from omnivorous.models import ChunkResult, DocumentMetadata
+from omnivorous.tokens import count_tokens
 
 _HEADING_SPLIT_RE = re.compile(r"(?=^#{1,6}\s)|(?=^.+\n[=-]{2,}\s*$)", re.MULTILINE)
 _HEADING_LINE_RE = re.compile(r"^#{1,6}\s")
