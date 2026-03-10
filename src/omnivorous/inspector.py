@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from agentmd.models import DocumentMetadata
-from agentmd.registry import ensure_registry_loaded, get_converter
+from omnivorous.models import DocumentMetadata
+from omnivorous.registry import ensure_registry_loaded, get_converter
 
 
 def inspect_file(path: Path) -> DocumentMetadata:
