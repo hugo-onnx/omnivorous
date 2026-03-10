@@ -91,3 +91,36 @@ def test_pack(fixtures_dir: Path, tmp_path: Path):
     assert (out / "CLAUDE.md").exists()
     assert (out / "PROJECT_CONTEXT.md").exists()
     assert (out / "manifest.json").exists()
+
+
+def test_pack_with_agent_flag(fixtures_dir: Path, tmp_path: Path):
+    out = tmp_path / "agent-ctx"
+    result = runner.invoke(app, ["pack", str(fixtures_dir), "-o", str(out), "--agent", "codex"])
+    assert result.exit_code == 0
+    assert (out / "AGENTS.md").exists()
+    assert not (out / "CLAUDE.md").exists()
+
+
+def test_pack_with_multiple_agents(fixtures_dir: Path, tmp_path: Path):
+    out = tmp_path / "agent-ctx"
+    result = runner.invoke(
+        app, ["pack", str(fixtures_dir), "-o", str(out), "--agent", "claude", "--agent", "codex"]
+    )
+    assert result.exit_code == 0
+    assert (out / "CLAUDE.md").exists()
+    assert (out / "AGENTS.md").exists()
+
+
+def test_pack_with_all_agents(fixtures_dir: Path, tmp_path: Path):
+    out = tmp_path / "agent-ctx"
+    result = runner.invoke(app, ["pack", str(fixtures_dir), "-o", str(out), "--agent", "all"])
+    assert result.exit_code == 0
+    assert (out / "CLAUDE.md").exists()
+    assert (out / "AGENTS.md").exists()
+    assert (out / ".cursor" / "rules" / "agentmd.md").exists()
+
+
+def test_pack_with_invalid_agent(fixtures_dir: Path, tmp_path: Path):
+    out = tmp_path / "agent-ctx"
+    result = runner.invoke(app, ["pack", str(fixtures_dir), "-o", str(out), "--agent", "invalid"])
+    assert result.exit_code == 1
