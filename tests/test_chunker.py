@@ -2,8 +2,8 @@
 
 from pathlib import Path
 
-from agentmd.chunker import chunk_by_headings, chunk_by_tokens, chunk_markdown, write_chunks
-from agentmd.models import DocumentMetadata
+from omnivorous.chunker import chunk_by_headings, chunk_by_tokens, chunk_markdown, write_chunks
+from omnivorous.models import DocumentMetadata
 
 
 def _meta() -> DocumentMetadata:
