@@ -1,10 +1,10 @@
 """Tests for converter registry."""
 
-from agentmd.converters.html import HtmlConverter
-from agentmd.converters.markdown import MarkdownConverter
-from agentmd.converters.pdf import PdfConverter
-from agentmd.converters.txt import TxtConverter
-from agentmd.registry import ensure_registry_loaded, get_converter, supported_extensions
+from omnivorous.converters.html import HtmlConverter
+from omnivorous.converters.markdown import MarkdownConverter
+from omnivorous.converters.pdf import PdfConverter
+from omnivorous.converters.txt import TxtConverter
+from omnivorous.registry import ensure_registry_loaded, get_converter, supported_extensions
 
 
 def test_supported_extensions():
