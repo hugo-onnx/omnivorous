@@ -55,3 +55,31 @@ def test_write_chunks(tmp_path: Path):
     assert paths[1].name == "test_002.md"
     assert paths[0].read_text() == chunks[0]
     assert paths[1].read_text() == chunks[1]
+
+
+def test_chunk_by_tokens_preserves_code_fences():
+    code_block = "```python\ndef hello():\n    print('hi')\n```"
+    content = f"Intro text.\n\n{code_block}\n\nAfter code."
+    # Use a very small chunk size to force splitting attempts
+    chunks = chunk_by_tokens(content, chunk_size=5)
+    for chunk in chunks:
+        fence_count = chunk.count("```")
+        assert fence_count % 2 == 0, f"Chunk has unclosed fence: {chunk!r}"
+
+
+def test_chunk_by_headings_merges_heading_only():
+    content = "# A\n\n## B\n\nText under B."
+    chunks = chunk_by_headings(content)
+    # "# A" alone would be heading-only, so it should be merged with "## B\n\nText under B."
+    assert len(chunks) == 1
+    assert "# A" in chunks[0]
+    assert "## B" in chunks[0]
+    assert "Text under B." in chunks[0]
+
+
+def test_chunk_by_headings_setext():
+    content = "Title\n=====\n\nSome content.\n\nSubtitle\n--------\n\nMore content."
+    chunks = chunk_by_headings(content)
+    assert len(chunks) == 2
+    assert "Title" in chunks[0]
+    assert "Subtitle" in chunks[1]
