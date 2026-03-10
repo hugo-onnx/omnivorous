@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from agentmd.converters.base import BaseConverter
+    from omnivorous.converters.base import BaseConverter
 
 _registry: dict[str, type[BaseConverter]] = {}
 
@@ -34,4 +34,4 @@ def supported_extensions() -> list[str]:
 def ensure_registry_loaded() -> None:
     """Ensure converters are registered by importing the converters package."""
     if not _registry:
-        import agentmd.converters  # noqa: F401
+        import omnivorous.converters  # noqa: F401
