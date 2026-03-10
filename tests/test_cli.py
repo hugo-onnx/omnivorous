@@ -4,7 +4,7 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from agentmd.cli import app
+from omnivorous.cli import app
 
 runner = CliRunner()
 
@@ -117,7 +117,7 @@ def test_pack_with_all_agents(fixtures_dir: Path, tmp_path: Path):
     assert result.exit_code == 0
     assert (out / "CLAUDE.md").exists()
     assert (out / "AGENTS.md").exists()
-    assert (out / ".cursor" / "rules" / "agentmd.md").exists()
+    assert (out / ".cursor" / "rules" / "omnivorous.md").exists()
 
 
 def test_pack_with_invalid_agent(fixtures_dir: Path, tmp_path: Path):
