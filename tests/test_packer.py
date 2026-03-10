@@ -6,7 +6,9 @@ from pathlib import Path
 import pytest
 
 from agentmd.models import DocumentMetadata
+from agentmd.agents import AGENT_TARGETS
 from agentmd.packer import (
+    generate_agent_instructions,
     generate_claude_md,
     generate_manifest,
     generate_project_context,
@@ -67,3 +69,73 @@ def test_pack_context_rejects_stem_collisions(tmp_path: Path):
     out = tmp_path / "out"
     with pytest.raises(ValueError, match="same name"):
         pack_context(source, out)
+
+
+def test_generate_agent_instructions():
+    agent = AGENT_TARGETS["codex"]
+    result = generate_agent_instructions([_meta("My Doc")], agent)
+    assert "# Project Context" in result
+    assert "My Doc" in result
+    assert "Codex CLI" in result
+
+
+def test_generate_claude_md_backward_compat():
+    """generate_claude_md still works as a backward-compatible wrapper."""
+    result = generate_claude_md([_meta("Doc A")])
+    assert "# Project Context" in result
+    assert "Doc A" in result
+    assert "Claude Code" in result
+
+
+def test_pack_context_codex_agent(fixtures_dir: Path, tmp_path: Path):
+    out = tmp_path / "agent-context"
+    pack_context(fixtures_dir, out, agents=["codex"])
+
+    assert (out / "AGENTS.md").exists()
+    assert not (out / "CLAUDE.md").exists()
+    assert (out / "PROJECT_CONTEXT.md").exists()
+    assert (out / "manifest.json").exists()
+
+    manifest = json.loads((out / "manifest.json").read_text())
+    assert "AGENTS.md" in manifest["output_files"]
+
+
+def test_pack_context_cursor_agent(fixtures_dir: Path, tmp_path: Path):
+    out = tmp_path / "agent-context"
+    pack_context(fixtures_dir, out, agents=["cursor"])
+
+    assert (out / ".cursor" / "rules" / "agentmd.md").exists()
+    assert not (out / "CLAUDE.md").exists()
+
+
+def test_pack_context_antigravity_agent(fixtures_dir: Path, tmp_path: Path):
+    out = tmp_path / "agent-context"
+    pack_context(fixtures_dir, out, agents=["antigravity"])
+
+    assert (out / ".agent" / "skills" / "agentmd.md").exists()
+
+
+def test_pack_context_multiple_agents(fixtures_dir: Path, tmp_path: Path):
+    out = tmp_path / "agent-context"
+    pack_context(fixtures_dir, out, agents=["claude", "codex"])
+
+    assert (out / "CLAUDE.md").exists()
+    assert (out / "AGENTS.md").exists()
+
+    manifest = json.loads((out / "manifest.json").read_text())
+    assert "CLAUDE.md" in manifest["output_files"]
+    assert "AGENTS.md" in manifest["output_files"]
+
+
+def test_pack_context_all_agents(fixtures_dir: Path, tmp_path: Path):
+    out = tmp_path / "agent-context"
+    pack_context(fixtures_dir, out, agents=["all"])
+
+    assert (out / "CLAUDE.md").exists()
+    assert (out / "AGENTS.md").exists()
+    assert (out / ".cursor" / "rules" / "agentmd.md").exists()
+    assert (out / ".github" / "copilot-instructions.md").exists()
+    assert (out / ".agent" / "skills" / "agentmd.md").exists()
+
+    manifest = json.loads((out / "manifest.json").read_text())
+    assert len(manifest["output_files"]) >= len(AGENT_TARGETS)
