@@ -8,15 +8,42 @@ from pathlib import Path
 from agentmd.models import ChunkResult, DocumentMetadata
 from agentmd.tokens import count_tokens
 
-_HEADING_SPLIT_RE = re.compile(r"(?=^#{1,6}\s)", re.MULTILINE)
+_HEADING_SPLIT_RE = re.compile(r"(?=^#{1,6}\s)|(?=^.+\n[=-]{2,}\s*$)", re.MULTILINE)
 _HEADING_LINE_RE = re.compile(r"^#{1,6}\s")
+_FENCE_RE = re.compile(r"^\s*`{3,}", re.MULTILINE)
+
+
+def _has_open_fence(text: str) -> bool:
+    return len(_FENCE_RE.findall(text)) % 2 != 0
+
+
+def _is_heading_only(chunk: str) -> bool:
+    return "\n" not in chunk and _HEADING_LINE_RE.match(chunk) is not None
 
 
 def chunk_by_headings(content: str) -> list[str]:
-    """Split markdown at heading boundaries."""
+    """Split markdown at heading boundaries.
+
+    Note: reference-style links (e.g. [text][ref]) defined in one section but
+    referenced in another will be separated from their definitions by this split.
+    This is a known structural limitation of heading-based chunking.
+    """
     parts = _HEADING_SPLIT_RE.split(content)
     chunks = [p.strip() for p in parts if p.strip()]
-    return chunks if chunks else [content]
+
+    # Merge heading-only chunks forward so they attach to the next section
+    merged: list[str] = []
+    for chunk in chunks:
+        if merged and _is_heading_only(merged[-1]):
+            merged[-1] = merged[-1] + "\n\n" + chunk
+        else:
+            merged.append(chunk)
+    # If the last chunk is heading-only, merge it backward
+    if len(merged) > 1 and _is_heading_only(merged[-1]):
+        merged[-2] = merged[-2] + "\n\n" + merged[-1]
+        merged.pop()
+
+    return merged if merged else [content]
 
 
 def chunk_by_tokens(content: str, chunk_size: int = 500) -> list[str]:
@@ -29,9 +56,13 @@ def chunk_by_tokens(content: str, chunk_size: int = 500) -> list[str]:
     for para in paragraphs:
         para_tokens = count_tokens(para)
         if current and current_tokens + para_tokens > chunk_size:
-            # Don't flush a chunk that is only a heading — keep it with the next paragraph
             current_text = "\n\n".join(current)
-            if _HEADING_LINE_RE.match(current_text) and current_text.count("\n") == 0:
+            # Don't flush inside an open code fence
+            if _has_open_fence(current_text):
+                current.append(para)
+                current_tokens += para_tokens
+            # Don't flush a chunk that is only a heading
+            elif _HEADING_LINE_RE.match(current_text) and current_text.count("\n") == 0:
                 current.append(para)
                 current_tokens += para_tokens
             else:
