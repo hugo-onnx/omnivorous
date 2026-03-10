@@ -14,6 +14,7 @@ from agentmd.tokens import count_tokens, get_encoding_name
 
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.+)$", re.MULTILINE)
 _TABLE_RE = re.compile(r"^\|.+\|$", re.MULTILINE)
+_MD_LINK_RE = re.compile(r"\[([^\]]+)\]\([^)]+\)")
 
 # Tags to remove entirely (content and all)
 _REMOVE_TAGS = {"script", "style", "nav", "header", "footer", "noscript"}
@@ -23,6 +24,10 @@ _REMOVE_ROLES = {"navigation", "search", "banner", "contentinfo"}
 
 # class substrings that indicate non-content elements
 _REMOVE_CLASS_KEYWORDS = {"sidebar", "breadcrumb", "headerlink", "permalink"}
+
+
+def _normalize_quotes(text: str) -> str:
+    return text.replace("\u2018", "'").replace("\u2019", "'").replace("\u201c", '"').replace("\u201d", '"')
 
 
 def _clean_soup(soup: BeautifulSoup) -> BeautifulSoup:
@@ -76,7 +81,10 @@ class HtmlConverter(BaseConverter):
         # Clean up excessive whitespace
         content = re.sub(r"\n{3,}", "\n\n", content).strip()
 
-        headings = [m.group(2) for m in _HEADING_RE.finditer(content)]
+        headings = [
+            _normalize_quotes(_MD_LINK_RE.sub(r"\1", m.group(2)))
+            for m in _HEADING_RE.finditer(content)
+        ]
 
         metadata = DocumentMetadata(
             source=str(path),
