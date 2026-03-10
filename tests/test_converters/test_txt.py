@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from agentmd.converters.txt import TxtConverter
+from omnivorous.converters.txt import TxtConverter
 
 
 def test_convert_txt(fixtures_dir: Path):
@@ -12,6 +12,7 @@ def test_convert_txt(fixtures_dir: Path):
     assert result.content.startswith("# notes")
     assert "plain text document" in result.content
     assert result.metadata.format == "txt"
+    assert result.metadata.source == "notes.txt"
     assert result.metadata.title == "notes"
     assert result.metadata.tokens_estimate > 0
 
