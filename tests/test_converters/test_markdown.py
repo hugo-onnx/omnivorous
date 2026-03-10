@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from agentmd.converters.markdown import MarkdownConverter
+from omnivorous.converters.markdown import MarkdownConverter
 
 
 def test_convert_markdown(fixtures_dir: Path):
@@ -11,6 +11,7 @@ def test_convert_markdown(fixtures_dir: Path):
 
     assert "# Sample Document" in result.content
     assert result.metadata.format == "markdown"
+    assert result.metadata.source == "readme.md"
     assert result.metadata.title == "Sample Document"
     assert len(result.metadata.headings) == 4  # Sample Document, Section One, Section Two, Subsection
     assert result.metadata.tables == 1
