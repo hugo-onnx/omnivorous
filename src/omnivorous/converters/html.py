@@ -8,9 +8,9 @@ from pathlib import Path
 from bs4 import BeautifulSoup, Tag
 from markdownify import markdownify
 
-from agentmd.converters.base import BaseConverter
-from agentmd.models import ConvertResult, DocumentMetadata
-from agentmd.tokens import count_tokens, get_encoding_name
+from omnivorous.converters.base import BaseConverter
+from omnivorous.models import ConvertResult, DocumentMetadata
+from omnivorous.tokens import count_tokens, get_encoding_name
 
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.+)$", re.MULTILINE)
 _TABLE_RE = re.compile(r"^\|.+\|$", re.MULTILINE)
@@ -87,7 +87,7 @@ class HtmlConverter(BaseConverter):
         ]
 
         metadata = DocumentMetadata(
-            source=str(path),
+            source=path.name,
             format="html",
             title=title or path.stem,
             headings=headings,
