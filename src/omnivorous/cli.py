@@ -1,4 +1,4 @@
-"""CLI commands for agentmd."""
+"""CLI commands for omnivorous."""
 
 from __future__ import annotations
 
@@ -8,10 +8,10 @@ from typing import Optional
 import typer
 from rich.table import Table
 
-from agentmd.output import console, get_progress, print_error, print_info, print_success
+from omnivorous.output import console, get_progress, print_error, print_info, print_success
 
 app = typer.Typer(
-    name="agentmd",
+    name="omni",
     help="Convert documents into agent-ready Markdown context.",
     no_args_is_help=True,
 )
@@ -19,7 +19,7 @@ app = typer.Typer(
 
 def _apply_encoding(encoding: str) -> None:
     """Validate and set the tiktoken encoding, exiting on error."""
-    from agentmd.tokens import set_encoding
+    from omnivorous.tokens import set_encoding
 
     try:
         set_encoding(encoding)
@@ -35,8 +35,8 @@ def convert(
     encoding: str = typer.Option("o200k_base", "--encoding", help="Tiktoken encoding name."),
 ) -> None:
     """Convert a single document to Markdown."""
-    from agentmd.frontmatter import add_frontmatter
-    from agentmd.registry import ensure_registry_loaded, get_converter
+    from omnivorous.frontmatter import add_frontmatter
+    from omnivorous.registry import ensure_registry_loaded, get_converter
 
     _apply_encoding(encoding)
     ensure_registry_loaded()
@@ -75,8 +75,8 @@ def ingest(
     encoding: str = typer.Option("o200k_base", "--encoding", help="Tiktoken encoding name."),
 ) -> None:
     """Scan a folder and convert all supported documents to Markdown."""
-    from agentmd.frontmatter import add_frontmatter
-    from agentmd.registry import ensure_registry_loaded, get_converter, supported_extensions
+    from omnivorous.frontmatter import add_frontmatter
+    from omnivorous.registry import ensure_registry_loaded, get_converter, supported_extensions
 
     _apply_encoding(encoding)
     ensure_registry_loaded()
@@ -129,7 +129,7 @@ def inspect(
     encoding: str = typer.Option("o200k_base", "--encoding", help="Tiktoken encoding name."),
 ) -> None:
     """Display metadata for a document."""
-    from agentmd.inspector import inspect_file
+    from omnivorous.inspector import inspect_file
 
     _apply_encoding(encoding)
 
@@ -179,8 +179,8 @@ def pack(
     ),
 ) -> None:
     """Generate an agent context pack from a folder of documents."""
-    from agentmd.agents import resolve_agents
-    from agentmd.packer import pack_context
+    from omnivorous.agents import resolve_agents
+    from omnivorous.packer import pack_context
 
     _apply_encoding(encoding)
 
