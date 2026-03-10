@@ -2,7 +2,7 @@
 
 import pytest
 
-from agentmd.tokens import count_tokens, get_encoding_name, set_encoding
+from omnivorous.tokens import count_tokens, get_encoding_name, set_encoding
 
 
 @pytest.fixture(autouse=True)
