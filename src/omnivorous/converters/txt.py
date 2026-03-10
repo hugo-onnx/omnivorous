@@ -5,9 +5,9 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from agentmd.converters.base import BaseConverter
-from agentmd.models import ConvertResult, DocumentMetadata
-from agentmd.tokens import count_tokens, get_encoding_name
+from omnivorous.converters.base import BaseConverter
+from omnivorous.models import ConvertResult, DocumentMetadata
+from omnivorous.tokens import count_tokens, get_encoding_name
 
 _GUTENBERG_START_RE = re.compile(r"^\*\*\*\s*START OF.*$", re.MULTILINE | re.IGNORECASE)
 _GUTENBERG_END_RE = re.compile(r"^\*\*\*\s*END OF.*$", re.MULTILINE | re.IGNORECASE)
@@ -35,7 +35,7 @@ class TxtConverter(BaseConverter):
         content = f"# {title}\n\n{raw}"
 
         metadata = DocumentMetadata(
-            source=str(path),
+            source=path.name,
             format="txt",
             title=title,
             tokens_estimate=count_tokens(content),
