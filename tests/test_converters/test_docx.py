@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from agentmd.converters.docx import DocxConverter
+from omnivorous.converters.docx import DocxConverter
 
 
 def test_convert_docx(sample_docx: Path):
@@ -10,6 +10,7 @@ def test_convert_docx(sample_docx: Path):
     result = converter.convert(sample_docx)
 
     assert result.metadata.format == "docx"
+    assert result.metadata.source == "sample.docx"
     assert "Test Document" in result.metadata.headings
     assert "Section One" in result.metadata.headings
     assert result.metadata.tables == 1
