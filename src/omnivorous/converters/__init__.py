@@ -1,11 +1,11 @@
 """Converter registry initialization — imports and registers all converters."""
 
-from agentmd.converters.docx import DocxConverter
-from agentmd.converters.html import HtmlConverter
-from agentmd.converters.markdown import MarkdownConverter
-from agentmd.converters.pdf import PdfConverter
-from agentmd.converters.txt import TxtConverter
-from agentmd.registry import register_converter
+from omnivorous.converters.docx import DocxConverter
+from omnivorous.converters.html import HtmlConverter
+from omnivorous.converters.markdown import MarkdownConverter
+from omnivorous.converters.pdf import PdfConverter
+from omnivorous.converters.txt import TxtConverter
+from omnivorous.registry import register_converter
 
 register_converter([".pdf"], PdfConverter)
 register_converter([".docx"], DocxConverter)
