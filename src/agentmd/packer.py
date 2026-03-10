@@ -142,8 +142,8 @@ def pack_context(
     (output_dir / "PROJECT_CONTEXT.md").write_text(project_ctx, encoding="utf-8")
     all_output_files.append("PROJECT_CONTEXT.md")
 
+    all_output_files.append("manifest.json")
     manifest = generate_manifest(all_metadata, all_output_files)
     (output_dir / "manifest.json").write_text(manifest, encoding="utf-8")
-    all_output_files.append("manifest.json")
 
     return output_dir
