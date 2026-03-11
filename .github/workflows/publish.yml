@@ -9,11 +9,18 @@ jobs:
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
-      id-token: write  # Required for trusted publishing
+      id-token: write
+      attestations: write
+      contents: read
+    env:
+      UV_PYTHON: "3.13"
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
       - run: uv sync --extra dev
       - run: uv run pytest
       - run: uv build
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/*
       - uses: pypa/gh-action-pypi-publish@release/v1
