@@ -146,11 +146,37 @@ The encoding name is recorded in each document's metadata so downstream tools kn
 
 ## Development
 
+[uv](https://docs.astral.sh/uv/) is required for development.
+
+### Setup
+
 ```bash
-uv sync
-uv run pytest
-uv run ruff check src/
+uv sync --extra dev
 ```
+
+This installs all runtime dependencies plus dev tools (pytest, pytest-cov, ruff).
+
+### Running Tests
+
+```bash
+uv run pytest                              # Run full test suite
+uv run pytest tests/test_converters/test_pdf.py  # Run a specific test module
+uv run pytest -v                           # Verbose output
+uv run pytest --cov=src/omnivorous         # With coverage report
+```
+
+Test fixtures live in `tests/fixtures/`.
+
+### Linting
+
+```bash
+uv run ruff check src/                     # Check for lint issues
+uv run ruff check src/ --fix               # Auto-fix lint issues
+```
+
+### CI
+
+CI runs tests, linting, and builds across Python 3.9–3.13 on every push to `main` and on pull requests.
 
 ## License
 
