@@ -2,6 +2,10 @@
 
 ![omni](images/omni.png)
 
+> Turn your documents into agent-ready Markdown context.
+
+omnivorous converts PDF, DOCX, HTML, Markdown, and plain text files into clean, structured Markdown that AI coding agents can consume directly. It handles format-specific cleanup, extracts metadata, counts tokens, and chunks documents intelligently — so your agents get the context they need without the noise.
+
 ## Install
 
 ```bash
@@ -31,20 +35,16 @@ omni pack docs/ --agent claude --agent codex --agent copilot
 
 # Generate for all supported agents
 omni pack docs/ --agent all
-
-# Convert all files in a folder
-omni ingest docs/ -o output/
-
-# Inspect a document
-omni inspect document.pdf
-
-# Convert a single file
-omni convert document.pdf -o output.md
-
-# Use a different token encoding (default: o200k_base)
-omni inspect document.pdf --encoding cl100k_base
-omni convert document.pdf --encoding cl100k_base -o output.md
 ```
+
+## How It Works
+
+omnivorous processes documents through a four-stage pipeline:
+
+1. **Convert** — Each format has a dedicated converter that produces clean Markdown. PDFs get ligature repair and header/footer removal; HTML gets nav, script, and boilerplate stripping; DOCX preserves structure while dropping styling.
+2. **Extract metadata** — Page count, headings, tables, and token count are recorded as YAML frontmatter.
+3. **Chunk** — Documents are split by heading structure or by token budget, keeping sections coherent and right-sized for agent context windows.
+4. **Pack** — An agent instruction file, project context summary, file manifest, and chunked docs are assembled into a ready-to-use context pack.
 
 ## Supported Formats
 
@@ -64,6 +64,18 @@ Generate a full agent context pack with:
 - `PROJECT_CONTEXT.md` — Documentation summary
 - `manifest.json` — File manifest
 - `docs/` — Converted and chunked documents
+
+```bash
+# Generate for a specific agent
+omni pack docs/ --agent codex
+omni pack docs/ --agent cursor
+
+# Generate for multiple agents at once
+omni pack docs/ --agent claude --agent codex --agent copilot
+
+# Generate for all supported agents
+omni pack docs/ --agent all
+```
 
 Options:
 - `-o, --output`: Output directory for agent context
@@ -87,6 +99,10 @@ Use `--agent all` to generate instruction files for every supported agent at onc
 ### `omni ingest <folder>`
 Scan a folder and convert all supported documents.
 
+```bash
+omni ingest docs/ -o output/
+```
+
 Options:
 - `-o, --output`: Output directory
 - `--encoding`: Tiktoken encoding name (default: `o200k_base`)
@@ -94,12 +110,26 @@ Options:
 ### `omni convert <file>`
 Convert a single document to Markdown with YAML frontmatter.
 
+```bash
+omni convert document.pdf -o output.md
+
+# Use a different token encoding
+omni convert document.pdf --encoding cl100k_base -o output.md
+```
+
 Options:
 - `-o, --output`: Output file path
 - `--encoding`: Tiktoken encoding name (default: `o200k_base`)
 
 ### `omni inspect <file>`
 Display document metadata: pages, headings, tables, token count, and encoding.
+
+```bash
+omni inspect document.pdf
+
+# Use a different token encoding
+omni inspect document.pdf --encoding cl100k_base
+```
 
 Options:
 - `--encoding`: Tiktoken encoding name (default: `o200k_base`)
