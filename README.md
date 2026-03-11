@@ -2,8 +2,6 @@
 
 ![omni](images/omni.png)
 
-Convert documents into agent-ready Markdown context for AI coding agents.
-
 ## Install
 
 ```bash
