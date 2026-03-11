@@ -8,6 +8,14 @@
 pip install omnivorous
 ```
 
+Or with [uv](https://docs.astral.sh/uv/):
+
+```bash
+uv tool install omnivorous
+```
+
+This makes the `omni` command available globally.
+
 ## Quick Start
 
 ```bash
