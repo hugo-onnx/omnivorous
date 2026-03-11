@@ -48,6 +48,9 @@ omni = "omnivorous.cli:app"
 [tool.hatch.build.targets.wheel]
 packages = ["src/omnivorous"]
 
+[tool.hatch.build.targets.sdist]
+exclude = ["tests/", "CLAUDE.md", "text.txt", ".claude/", ".github/"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
