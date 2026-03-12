@@ -16,6 +16,7 @@ class DocumentMetadata:
     pages: int = 0
     headings: list[str] = field(default_factory=list)
     tables: int = 0
+    images: int = 0
     tokens_estimate: int = 0
     encoding: str = ""
 
@@ -27,6 +28,7 @@ class DocumentMetadata:
             "pages": self.pages,
             "headings": self.headings,
             "tables": self.tables,
+            "images": self.images,
             "tokens_estimate": self.tokens_estimate,
             "encoding": self.encoding,
         }
