@@ -48,8 +48,7 @@ def test_chunk_markdown_tokens_strategy():
 
 def test_write_chunks(tmp_path: Path):
     chunks = ["# Chunk 1\n\nContent.", "# Chunk 2\n\nMore content."]
-    source = Path("test.md")
-    paths = write_chunks(chunks, source, tmp_path)
+    paths = write_chunks(chunks, "test", tmp_path)
     assert len(paths) == 2
     assert paths[0].name == "test_001.md"
     assert paths[1].name == "test_002.md"
