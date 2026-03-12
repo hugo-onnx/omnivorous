@@ -48,8 +48,8 @@ def test_setext_headings_detected(tmp_path: Path):
     f = tmp_path / "setext.md"
     f.write_text(content, encoding="utf-8")
     result = MarkdownConverter().convert(f)
-    assert "My Title" in result.metadata.headings
-    assert "Subtitle" in result.metadata.headings
+    assert "# My Title" in result.metadata.headings
+    assert "## Subtitle" in result.metadata.headings
 
 
 def test_curly_quotes_normalized(tmp_path: Path):
@@ -57,4 +57,44 @@ def test_curly_quotes_normalized(tmp_path: Path):
     f = tmp_path / "quotes.md"
     f.write_text(content, encoding="utf-8")
     result = MarkdownConverter().convert(f)
-    assert 'The "Big" Idea' in result.metadata.headings
+    assert '# The "Big" Idea' in result.metadata.headings
+
+
+def test_image_count(tmp_path: Path):
+    content = "# Doc\n\n![photo](img.png)\n\nText.\n\n![diagram](diag.svg)\n"
+    f = tmp_path / "images.md"
+    f.write_text(content, encoding="utf-8")
+    result = MarkdownConverter().convert(f)
+    assert result.metadata.images == 2
+    # Images should be preserved in content
+    assert "![photo](img.png)" in result.content
+    assert "![diagram](diag.svg)" in result.content
+
+
+def test_no_images(tmp_path: Path):
+    content = "# Doc\n\nNo images here."
+    f = tmp_path / "noimages.md"
+    f.write_text(content, encoding="utf-8")
+    result = MarkdownConverter().convert(f)
+    assert result.metadata.images == 0
+
+
+def test_frontmatter_stripped_from_content(tmp_path: Path):
+    content = "---\ntitle: Test\nformat: markdown\n---\n\n# Real Title\n\nBody text."
+    f = tmp_path / "fm.md"
+    f.write_text(content, encoding="utf-8")
+    result = MarkdownConverter().convert(f)
+    assert not result.content.startswith("---")
+    assert "# Real Title" in result.content
+    assert result.metadata.title == "Real Title"
+
+
+def test_frontmatter_not_detected_as_setext_heading(tmp_path: Path):
+    content = "---\ntitle: and more.\n---\n\n# Actual Title\n\nBody."
+    f = tmp_path / "fm_setext.md"
+    f.write_text(content, encoding="utf-8")
+    result = MarkdownConverter().convert(f)
+    # "and more." should NOT appear as a heading
+    for h in result.metadata.headings:
+        assert "and more." not in h
+    assert result.metadata.title == "Actual Title"
