@@ -89,7 +89,7 @@ Options:
 | Agent | Key | Generated File |
 |-------|-----|----------------|
 | Claude Code | `claude` | `CLAUDE.md` |
-| Codex CLI | `codex` | `AGENTS.md` |
+| Codex  | `codex` | `AGENTS.md` |
 | Cursor | `cursor` | `.cursor/rules/omnivorous.md` |
 | GitHub Copilot | `copilot` | `.github/copilot-instructions.md` |
 | Google Antigravity | `antigravity` | `.agent/skills/omnivorous.md` |
