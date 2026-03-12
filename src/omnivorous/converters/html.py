@@ -75,16 +75,26 @@ class HtmlConverter(BaseConverter):
 
         # If a <main> or role="main" element exists, convert only that
         main = soup.find("main") or soup.find(attrs={"role": "main"})
+        scope = main or soup
+
+        # Replace <img> tags with markdown image placeholders
+        image_count = 0
+        for img in scope.find_all("img"):
+            alt = img.get("alt") or img.get("title") or "image"
+            img.replace_with(f"![{alt}]()")
+            image_count += 1
+
         convert_html = str(main) if main else str(soup)
 
-        content = markdownify(convert_html, heading_style="ATX", strip=["img"])
+        content = markdownify(convert_html, heading_style="ATX")
         # Clean up excessive whitespace
         content = re.sub(r"\n{3,}", "\n\n", content).strip()
 
-        headings = [
-            _normalize_quotes(_MD_LINK_RE.sub(r"\1", m.group(2)))
-            for m in _HEADING_RE.finditer(content)
-        ]
+        headings = []
+        for m in _HEADING_RE.finditer(content):
+            prefix = m.group(1)
+            text = _normalize_quotes(_MD_LINK_RE.sub(r"\1", m.group(2)))
+            headings.append(f"{prefix} {text}")
 
         metadata = DocumentMetadata(
             source=path.name,
@@ -92,6 +102,7 @@ class HtmlConverter(BaseConverter):
             title=title or path.stem,
             headings=headings,
             tables=table_count,
+            images=image_count,
             tokens_estimate=count_tokens(content),
             encoding=get_encoding_name(),
         )
