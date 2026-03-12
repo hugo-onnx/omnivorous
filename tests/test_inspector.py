@@ -28,4 +28,4 @@ def test_inspect_txt(fixtures_dir: Path):
 def test_inspect_docx(sample_docx: Path):
     meta = inspect_file(sample_docx)
     assert meta.format == "docx"
-    assert "Test Document" in meta.headings
+    assert "# Test Document" in meta.headings
