@@ -20,8 +20,6 @@ def sample_pdf(tmp_path: Path) -> Path:
     writer = PdfWriter()
     writer.add_blank_page(width=612, height=792)
 
-    # Add text content via page annotations isn't ideal —
-    # use a pre-built PDF fixture instead
     out = tmp_path / "sample.pdf"
     with open(out, "wb") as f:
         writer.write(f)
