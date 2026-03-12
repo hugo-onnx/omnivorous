@@ -94,19 +94,9 @@ def ingest(
         print_error(f"No supported files found in {folder}")
         raise typer.Exit(1)
 
-    # Check for stem collisions
-    stems: dict[str, list[Path]] = {}
-    for f in files:
-        stems.setdefault(f.stem, []).append(f)
-    collisions = {stem: paths for stem, paths in stems.items() if len(paths) > 1}
-    if collisions:
-        lines = ["Multiple source files share the same name (stem) and would overwrite each other:"]
-        for stem, paths in collisions.items():
-            names = ", ".join(str(p) for p in paths)
-            lines.append(f"  '{stem}' → {names}")
-        lines.append("Rename the conflicting files so each has a unique name (ignoring extension).")
-        print_error("\n".join(lines))
-        raise typer.Exit(1)
+    from omnivorous.packer import resolve_output_paths
+
+    output_map = resolve_output_paths(files, folder)
 
     print_info(f"Found {len(files)} file(s)")
 
@@ -116,7 +106,9 @@ def ingest(
             converter = get_converter(f.suffix.lower())
             result = converter.convert(f)
             md = add_frontmatter(result.content, result.metadata.to_dict())
-            out_path = out_dir / (f.stem + ".md")
+            out_rel = output_map[f]
+            out_path = out_dir / out_rel
+            out_path.parent.mkdir(parents=True, exist_ok=True)
             out_path.write_text(md, encoding="utf-8")
             progress.update(task, advance=1)
 
@@ -151,6 +143,7 @@ def inspect(
     table.add_row("Pages", str(meta.pages) if meta.pages else "N/A")
     table.add_row("Headings", str(len(meta.headings)))
     table.add_row("Tables", str(meta.tables))
+    table.add_row("Images", str(meta.images))
     table.add_row("Tokens (est.)", str(meta.tokens_estimate))
     table.add_row("Encoding", meta.encoding or "N/A")
 
@@ -161,7 +154,11 @@ def inspect(
         headings_table.add_column("#", style="dim")
         headings_table.add_column("Heading")
         for i, h in enumerate(meta.headings, 1):
-            headings_table.add_row(str(i), h)
+            # Strip prefix for display, show indentation for hierarchy
+            stripped = h.lstrip("#").strip()
+            level = len(h) - len(h.lstrip("#"))
+            indent = "  " * max(0, level - 1)
+            headings_table.add_row(str(i), f"{indent}{stripped}")
         console.print(headings_table)
 
 
