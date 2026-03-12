@@ -25,8 +25,9 @@ def generate_agent_instructions(
         "",
     ]
     for meta in docs_metadata:
-        tokens = f" (~{meta.tokens_estimate} tokens)" if meta.tokens_estimate else ""
-        lines.append(f"- **{meta.title}** ({meta.format}){tokens}")
+        tokens = f"~{meta.tokens_estimate} tokens" if meta.tokens_estimate else ""
+        label = f"- **{meta.title}** ({meta.format}, {tokens})" if tokens else f"- **{meta.title}** ({meta.format})"
+        lines.append(label)
 
     lines.extend([
         "",
@@ -68,6 +69,8 @@ def generate_project_context(docs_metadata: list[DocumentMetadata]) -> str:
             lines.append(f"- Headings: {len(meta.headings)}")
         if meta.tables:
             lines.append(f"- Tables: {meta.tables}")
+        if meta.images:
+            lines.append(f"- Images: {meta.images}")
         lines.append(f"- Tokens: {meta.tokens_estimate}")
         lines.append("")
 
@@ -86,6 +89,41 @@ def generate_manifest(
         "total_tokens": sum(m.tokens_estimate for m in docs_metadata),
     }
     return json.dumps(manifest, indent=2) + "\n"
+
+
+def resolve_output_paths(
+    source_files: list[Path], source_dir: Path
+) -> dict[Path, Path]:
+    """Map each source file to a unique relative output path under the output directory.
+
+    Preserves directory structure from source_dir. If multiple files in the same
+    directory share the same stem, disambiguates by appending the original extension
+    to the stem (e.g. ``readme.md`` + ``readme.txt`` → ``readme_md.md`` + ``readme_txt.md``).
+    """
+    from collections import defaultdict
+
+    # Compute initial relative output paths (preserving directory structure)
+    initial: dict[Path, Path] = {}
+    for f in source_files:
+        initial[f] = f.relative_to(source_dir).with_suffix(".md")
+
+    # Group by output path to find collisions
+    groups: dict[Path, list[Path]] = defaultdict(list)
+    for src, out in initial.items():
+        groups[out].append(src)
+
+    resolved: dict[Path, Path] = {}
+    for out_path, sources in groups.items():
+        if len(sources) == 1:
+            resolved[sources[0]] = out_path
+        else:
+            # Disambiguate by appending the original extension (without dot) to the stem
+            for src in sources:
+                ext_tag = src.suffix.lstrip(".")
+                new_name = f"{out_path.stem}_{ext_tag}.md"
+                resolved[src] = out_path.parent / new_name
+
+    return resolved
 
 
 def pack_context(
@@ -109,18 +147,7 @@ def pack_context(
         f for f in source_dir.rglob("*") if f.is_file() and f.suffix.lower() in exts
     )
 
-    # Check for stem collisions — multiple files that would map to the same .md output
-    stems: dict[str, list[Path]] = {}
-    for f in source_files:
-        stems.setdefault(f.stem, []).append(f)
-    collisions = {stem: paths for stem, paths in stems.items() if len(paths) > 1}
-    if collisions:
-        lines = ["Multiple source files share the same name (stem) and would overwrite each other:"]
-        for stem, paths in collisions.items():
-            names = ", ".join(str(p) for p in paths)
-            lines.append(f"  '{stem}' → {names}")
-        lines.append("Rename the conflicting files so each has a unique name (ignoring extension).")
-        raise ValueError("\n".join(lines))
+    output_map = resolve_output_paths(source_files, source_dir)
 
     for source_file in source_files:
         ext = source_file.suffix.lower()
@@ -129,20 +156,22 @@ def pack_context(
         results.append(result)
 
         # Add frontmatter and write converted markdown
+        out_rel = output_map[source_file]
         md_with_frontmatter = add_frontmatter(result.content, result.metadata.to_dict())
-        out_name = source_file.stem + ".md"
-        out_path = docs_dir / out_name
+        out_path = docs_dir / out_rel
+        out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(md_with_frontmatter, encoding="utf-8")
-        all_output_files.append(f"docs/{out_name}")
+        all_output_files.append(f"docs/{out_rel.as_posix()}")
 
         # Chunk if content is large enough
         chunk_result = chunk_markdown(result.content, result.metadata, chunk_by, chunk_size)
         if len(chunk_result.chunks) > 1:
             chunk_paths = write_chunks(
-                chunk_result.chunks, source_file, docs_dir
+                chunk_result.chunks, out_rel.stem, out_path.parent
             )
             for cp in chunk_paths:
-                all_output_files.append(f"docs/{cp.name}")
+                chunk_rel = cp.relative_to(docs_dir)
+                all_output_files.append(f"docs/{chunk_rel.as_posix()}")
 
     # Generate meta files
     all_metadata = [r.metadata for r in results]
