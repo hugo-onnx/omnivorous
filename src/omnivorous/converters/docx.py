@@ -38,6 +38,22 @@ def _table_to_markdown(table: Table) -> str:
     return "\n".join(lines)
 
 
+def _extract_image_placeholders(element) -> list[str]:
+    """Extract image placeholders from a paragraph element's w:drawing descendants."""
+    from docx.oxml.ns import qn
+
+    placeholders: list[str] = []
+    for drawing in element.iter(qn("w:drawing")):
+        # Look for wp:docPr which carries alt text (descr) and name
+        for doc_pr in drawing.iter(qn("wp:docPr")):
+            alt = doc_pr.get("descr") or doc_pr.get("name") or "image"
+            placeholders.append(f"![{alt}]()")
+            break
+        else:
+            placeholders.append("![image]()")
+    return placeholders
+
+
 class DocxConverter(BaseConverter):
     @property
     def name(self) -> str:
@@ -48,6 +64,7 @@ class DocxConverter(BaseConverter):
         parts: list[str] = []
         headings: list[str] = []
         table_count = 0
+        image_count = 0
 
         # Interleave paragraphs and tables in document order
         # python-docx exposes doc.element.body which contains all elements in order
@@ -61,14 +78,21 @@ class DocxConverter(BaseConverter):
                 para = Paragraph(element, doc)
                 style_name = para.style.name if para.style else ""
                 text = para.text.strip()
-                if not text:
+
+                # Extract image placeholders from this paragraph
+                img_placeholders = _extract_image_placeholders(element)
+                image_count += len(img_placeholders)
+
+                if not text and not img_placeholders:
                     continue
                 prefix = _HEADING_MAP.get(style_name, "")
-                if prefix:
-                    headings.append(text)
+                if prefix and text:
+                    headings.append(f"{prefix} {text}")
                     parts.append(f"{prefix} {text}")
-                else:
+                elif text:
                     parts.append(text)
+                for placeholder in img_placeholders:
+                    parts.append(placeholder)
             elif element.tag == qn("w:tbl"):
                 table = Table(element, doc)
                 md = _table_to_markdown(table)
@@ -83,6 +107,7 @@ class DocxConverter(BaseConverter):
             title=path.stem,
             headings=headings,
             tables=table_count,
+            images=image_count,
             tokens_estimate=count_tokens(content),
             encoding=get_encoding_name(),
         )
