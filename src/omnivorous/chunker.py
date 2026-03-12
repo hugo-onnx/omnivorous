@@ -107,10 +107,9 @@ def chunk_markdown(
     return ChunkResult(chunks=chunks, metadata=metadata)
 
 
-def write_chunks(chunks: list[str], source_path: Path, output_dir: Path) -> list[Path]:
+def write_chunks(chunks: list[str], stem: str, output_dir: Path) -> list[Path]:
     """Write chunks to numbered files. Returns list of written paths."""
     output_dir.mkdir(parents=True, exist_ok=True)
-    stem = source_path.stem
     written: list[Path] = []
     for i, chunk in enumerate(chunks, 1):
         out_path = output_dir / f"{stem}_{i:03d}.md"
