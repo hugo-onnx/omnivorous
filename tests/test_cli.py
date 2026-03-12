@@ -124,3 +124,31 @@ def test_pack_with_invalid_agent(fixtures_dir: Path, tmp_path: Path):
     out = tmp_path / "agent-ctx"
     result = runner.invoke(app, ["pack", str(fixtures_dir), "-o", str(out), "--agent", "invalid"])
     assert result.exit_code == 1
+
+
+def test_ingest_preserves_subdirectory_structure(tmp_path: Path):
+    source = tmp_path / "source"
+    (source / "ch1").mkdir(parents=True)
+    (source / "ch2").mkdir(parents=True)
+    (source / "ch1" / "intro.txt").write_text("Chapter 1 intro")
+    (source / "ch2" / "intro.txt").write_text("Chapter 2 intro")
+
+    out = tmp_path / "output"
+    result = runner.invoke(app, ["ingest", str(source), "-o", str(out)])
+    assert result.exit_code == 0
+    assert (out / "ch1" / "intro.md").exists()
+    assert (out / "ch2" / "intro.md").exists()
+
+
+def test_ingest_disambiguates_same_stem(tmp_path: Path):
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "readme.md").write_text("# Hello")
+    (source / "readme.txt").write_text("Hello")
+
+    out = tmp_path / "output"
+    result = runner.invoke(app, ["ingest", str(source), "-o", str(out)])
+    assert result.exit_code == 0
+    assert (out / "readme_md.md").exists()
+    assert (out / "readme_txt.md").exists()
+    assert not (out / "readme.md").exists()
