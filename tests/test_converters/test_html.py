@@ -27,7 +27,7 @@ def test_heading_link_stripped(tmp_path: Path):
     f = tmp_path / "links.html"
     f.write_text(html, encoding="utf-8")
     result = HtmlConverter().convert(f)
-    assert "Linked Title" in result.metadata.headings
+    assert "# Linked Title" in result.metadata.headings
     # The heading text should not contain markdown link syntax
     for h in result.metadata.headings:
         assert "](/" not in h
@@ -38,4 +38,22 @@ def test_curly_quotes_normalized_html(tmp_path: Path):
     f = tmp_path / "quotes.html"
     f.write_text(html, encoding="utf-8")
     result = HtmlConverter().convert(f)
-    assert "The 'Smart' Way" in result.metadata.headings
+    assert "## The 'Smart' Way" in result.metadata.headings
+
+
+def test_html_image_placeholder_with_alt(tmp_path: Path):
+    html = '<html><body><p>Text</p><img alt="diagram" src="x.png"><p>More.</p></body></html>'
+    f = tmp_path / "img.html"
+    f.write_text(html, encoding="utf-8")
+    result = HtmlConverter().convert(f)
+    assert "![diagram]()" in result.content
+    assert result.metadata.images == 1
+
+
+def test_html_image_placeholder_no_alt(tmp_path: Path):
+    html = '<html><body><p>Text</p><img src="x.png"><p>More.</p></body></html>'
+    f = tmp_path / "img_noalt.html"
+    f.write_text(html, encoding="utf-8")
+    result = HtmlConverter().convert(f)
+    assert "![image]()" in result.content
+    assert result.metadata.images == 1
