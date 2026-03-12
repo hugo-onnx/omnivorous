@@ -3,8 +3,6 @@
 import json
 from pathlib import Path
 
-import pytest
-
 from omnivorous.models import DocumentMetadata
 from omnivorous.agents import AGENT_TARGETS
 from omnivorous.packer import (
@@ -13,12 +11,20 @@ from omnivorous.packer import (
     generate_manifest,
     generate_project_context,
     pack_context,
+    resolve_output_paths,
 )
 
 
-def _meta(title: str = "Test Doc") -> DocumentMetadata:
+def _meta(
+    title: str = "Test Doc",
+    headings: list[str] | None = None,
+) -> DocumentMetadata:
     return DocumentMetadata(
-        source="test.md", format="markdown", title=title, tokens_estimate=100
+        source="test.md",
+        format="markdown",
+        title=title,
+        tokens_estimate=100,
+        headings=headings or [],
     )
 
 
@@ -59,16 +65,36 @@ def test_pack_context(fixtures_dir: Path, tmp_path: Path):
     assert "manifest.json" in manifest["output_files"]
 
 
-def test_pack_context_rejects_stem_collisions(tmp_path: Path):
-    """Files with the same stem but different extensions should be rejected."""
+def test_pack_context_disambiguates_stem_collisions(tmp_path: Path):
+    """Files with the same stem but different extensions get disambiguated output names."""
     source = tmp_path / "source"
     source.mkdir()
     (source / "readme.md").write_text("# Hello")
     (source / "readme.txt").write_text("Hello")
 
     out = tmp_path / "out"
-    with pytest.raises(ValueError, match="same name"):
-        pack_context(source, out)
+    pack_context(source, out)
+
+    docs = out / "docs"
+    assert (docs / "readme_md.md").exists()
+    assert (docs / "readme_txt.md").exists()
+    assert not (docs / "readme.md").exists()
+
+
+def test_pack_context_preserves_subdirectory_structure(tmp_path: Path):
+    """Files in different subdirs with the same name get separate output directories."""
+    source = tmp_path / "source"
+    (source / "ch1").mkdir(parents=True)
+    (source / "ch2").mkdir(parents=True)
+    (source / "ch1" / "intro.txt").write_text("Chapter 1 intro")
+    (source / "ch2" / "intro.txt").write_text("Chapter 2 intro")
+
+    out = tmp_path / "out"
+    pack_context(source, out)
+
+    docs = out / "docs"
+    assert (docs / "ch1" / "intro.md").exists()
+    assert (docs / "ch2" / "intro.md").exists()
 
 
 def test_generate_agent_instructions():
@@ -139,3 +165,66 @@ def test_pack_context_all_agents(fixtures_dir: Path, tmp_path: Path):
 
     manifest = json.loads((out / "manifest.json").read_text())
     assert len(manifest["output_files"]) >= len(AGENT_TARGETS)
+
+
+# --- resolve_output_paths unit tests ---
+
+
+def test_resolve_output_paths_no_conflicts(tmp_path: Path):
+    source = tmp_path / "src"
+    source.mkdir()
+    files = [source / "a.txt", source / "b.md"]
+    for f in files:
+        f.touch()
+
+    result = resolve_output_paths(files, source)
+    assert result[files[0]] == Path("a.md")
+    assert result[files[1]] == Path("b.md")
+
+
+def test_resolve_output_paths_same_stem_different_ext(tmp_path: Path):
+    source = tmp_path / "src"
+    source.mkdir()
+    f1 = source / "readme.md"
+    f2 = source / "readme.txt"
+    f1.touch()
+    f2.touch()
+
+    result = resolve_output_paths([f1, f2], source)
+    assert result[f1] == Path("readme_md.md")
+    assert result[f2] == Path("readme_txt.md")
+
+
+def test_resolve_output_paths_subdirectories(tmp_path: Path):
+    source = tmp_path / "src"
+    (source / "ch1").mkdir(parents=True)
+    (source / "ch2").mkdir(parents=True)
+    f1 = source / "ch1" / "intro.txt"
+    f2 = source / "ch2" / "intro.txt"
+    f1.touch()
+    f2.touch()
+
+    result = resolve_output_paths([f1, f2], source)
+    assert result[f1] == Path("ch1/intro.md")
+    assert result[f2] == Path("ch2/intro.md")
+
+
+def test_resolve_output_paths_mixed(tmp_path: Path):
+    """Subdirectory separation prevents collision, same-dir collision is disambiguated."""
+    source = tmp_path / "src"
+    source.mkdir()
+    (source / "sub").mkdir()
+    f1 = source / "notes.md"
+    f2 = source / "notes.txt"
+    f3 = source / "sub" / "notes.txt"
+    for f in [f1, f2, f3]:
+        f.touch()
+
+    result = resolve_output_paths([f1, f2, f3], source)
+    # f1 and f2 collide at root → disambiguated
+    assert result[f1] == Path("notes_md.md")
+    assert result[f2] == Path("notes_txt.md")
+    # f3 is in a subdir → no collision
+    assert result[f3] == Path("sub/notes.md")
+
+
