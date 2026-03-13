@@ -140,6 +140,26 @@ def test_ingest_preserves_subdirectory_structure(tmp_path: Path):
     assert (out / "ch2" / "intro.md").exists()
 
 
+def test_ingest_auto_increments_existing_output(fixtures_dir: Path, tmp_path: Path):
+    out = tmp_path / "output"
+    out.mkdir()
+    result = runner.invoke(app, ["ingest", str(fixtures_dir), "-o", str(out)])
+    assert result.exit_code == 0
+    incremented = tmp_path / "output-1"
+    assert incremented.is_dir()
+    assert any(incremented.iterdir())
+
+
+def test_pack_auto_increments_existing_output(fixtures_dir: Path, tmp_path: Path):
+    out = tmp_path / "agent-context"
+    out.mkdir()
+    result = runner.invoke(app, ["pack", str(fixtures_dir), "-o", str(out)])
+    assert result.exit_code == 0
+    incremented = tmp_path / "agent-context-1"
+    assert incremented.is_dir()
+    assert (incremented / "CLAUDE.md").exists()
+
+
 def test_ingest_disambiguates_same_stem(tmp_path: Path):
     source = tmp_path / "source"
     source.mkdir()
