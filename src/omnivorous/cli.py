@@ -168,8 +168,6 @@ def pack(
     output: Optional[Path] = typer.Option(
         None, "-o", "--output", help="Output directory for agent context."
     ),
-    chunk_size: int = typer.Option(500, "--chunk-size", help="Target chunk size in tokens."),
-    chunk_by: str = typer.Option("heading", "--chunk-by", help="Strategy: heading or tokens."),
     encoding: str = typer.Option("o200k_base", "--encoding", help="Tiktoken encoding name."),
     agent: Optional[list[str]] = typer.Option(
         None, "--agent", "-a", help="Target agent(s): claude, codex, cursor, copilot, antigravity, or all."
@@ -197,7 +195,7 @@ def pack(
     with get_progress() as progress:
         progress.add_task("Packing agent context...", total=None)
         try:
-            pack_context(folder, out_dir, chunk_size=chunk_size, chunk_by=chunk_by, agents=agent_names)
+            pack_context(folder, out_dir, agents=agent_names)
         except ValueError as exc:
             print_error(str(exc))
             raise typer.Exit(1)
