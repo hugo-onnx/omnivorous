@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 
 from omnivorous.agents import AgentTarget, resolve_agents
-from omnivorous.chunker import chunk_markdown, write_chunks
 from omnivorous.frontmatter import add_frontmatter
 from omnivorous.models import ConvertResult, DocumentMetadata
 from omnivorous.registry import ensure_registry_loaded, get_converter, supported_extensions
@@ -25,9 +24,7 @@ def generate_agent_instructions(
         "",
     ]
     for meta in docs_metadata:
-        tokens = f"~{meta.tokens_estimate} tokens" if meta.tokens_estimate else ""
-        label = f"- **{meta.title}** ({meta.format}, {tokens})" if tokens else f"- **{meta.title}** ({meta.format})"
-        lines.append(label)
+        lines.append(f"- **{meta.title}** (~{meta.tokens_estimate} tokens)")
 
     lines.extend([
         "",
@@ -62,7 +59,6 @@ def generate_project_context(docs_metadata: list[DocumentMetadata]) -> str:
     for meta in docs_metadata:
         lines.append(f"### {meta.title}")
         lines.append(f"- Source: `{meta.source}`")
-        lines.append(f"- Format: {meta.format}")
         if meta.pages:
             lines.append(f"- Pages: {meta.pages}")
         if meta.headings:
@@ -78,13 +74,21 @@ def generate_project_context(docs_metadata: list[DocumentMetadata]) -> str:
 
 
 def generate_manifest(
-    docs_metadata: list[DocumentMetadata], output_files: list[str]
+    docs_metadata: list[DocumentMetadata],
+    output_files: list[str],
+    original_sources: list[str] | None = None,
 ) -> str:
     """Generate a manifest.json for the agent context pack."""
+    documents = []
+    for i, m in enumerate(docs_metadata):
+        doc = m.to_dict()
+        if original_sources and i < len(original_sources):
+            doc["original_source"] = original_sources[i]
+        documents.append(doc)
     manifest = {
         "version": "1.0",
         "generator": "omnivorous",
-        "documents": [m.to_dict() for m in docs_metadata],
+        "documents": documents,
         "output_files": output_files,
         "total_tokens": sum(m.tokens_estimate for m in docs_metadata),
     }
@@ -129,11 +133,9 @@ def resolve_output_paths(
 def pack_context(
     source_dir: Path,
     output_dir: Path,
-    chunk_size: int = 500,
-    chunk_by: str = "heading",
     agents: list[str] | None = None,
 ) -> Path:
-    """Orchestrate full pipeline: convert all docs, chunk, and generate agent context pack."""
+    """Orchestrate full pipeline: convert all docs and generate agent context pack."""
     ensure_registry_loaded()
     exts = set(supported_extensions())
     docs_dir = output_dir / "docs"
@@ -141,6 +143,7 @@ def pack_context(
 
     results: list[ConvertResult] = []
     all_output_files: list[str] = []
+    original_sources: list[str] = []
 
     # Find and convert all supported files
     source_files = sorted(
@@ -155,23 +158,17 @@ def pack_context(
         result = converter.convert(source_file)
         results.append(result)
 
-        # Add frontmatter and write converted markdown
+        # Save original source as relative path before overwriting
+        original_sources.append(source_file.relative_to(source_dir).as_posix())
+
+        # Point source to the output markdown so agents read the converted file
         out_rel = output_map[source_file]
+        result.metadata.source = f"docs/{out_rel.as_posix()}"
         md_with_frontmatter = add_frontmatter(result.content, result.metadata.to_dict())
         out_path = docs_dir / out_rel
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(md_with_frontmatter, encoding="utf-8")
         all_output_files.append(f"docs/{out_rel.as_posix()}")
-
-        # Chunk if content is large enough
-        chunk_result = chunk_markdown(result.content, result.metadata, chunk_by, chunk_size)
-        if len(chunk_result.chunks) > 1:
-            chunk_paths = write_chunks(
-                chunk_result.chunks, out_rel.stem, out_path.parent
-            )
-            for cp in chunk_paths:
-                chunk_rel = cp.relative_to(docs_dir)
-                all_output_files.append(f"docs/{chunk_rel.as_posix()}")
 
     # Generate meta files
     all_metadata = [r.metadata for r in results]
@@ -189,7 +186,7 @@ def pack_context(
     all_output_files.append("PROJECT_CONTEXT.md")
 
     all_output_files.append("manifest.json")
-    manifest = generate_manifest(all_metadata, all_output_files)
+    manifest = generate_manifest(all_metadata, all_output_files, original_sources)
     (output_dir / "manifest.json").write_text(manifest, encoding="utf-8")
 
     return output_dir
