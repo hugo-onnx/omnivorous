@@ -172,3 +172,24 @@ def test_ingest_disambiguates_same_stem(tmp_path: Path):
     assert (out / "readme_md.md").exists()
     assert (out / "readme_txt.md").exists()
     assert not (out / "readme.md").exists()
+
+
+def test_convert_with_mode_fast(fixtures_dir: Path):
+    result = runner.invoke(app, ["convert", str(fixtures_dir / "notes.txt"), "--mode", "fast"])
+    assert result.exit_code == 0
+
+
+def test_convert_with_invalid_mode(fixtures_dir: Path):
+    result = runner.invoke(app, ["convert", str(fixtures_dir / "notes.txt"), "--mode", "invalid"])
+    assert result.exit_code == 1
+
+
+def test_convert_with_scientific_mode_no_marker(fixtures_dir: Path):
+    """Scientific mode should fail gracefully when marker-pdf is not installed."""
+    from unittest.mock import patch
+
+    with patch.dict("sys.modules", {"marker": None}):
+        result = runner.invoke(
+            app, ["convert", str(fixtures_dir / "notes.txt"), "--mode", "scientific"]
+        )
+    assert result.exit_code == 1
