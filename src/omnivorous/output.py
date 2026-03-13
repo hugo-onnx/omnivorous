@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
@@ -30,3 +32,18 @@ def get_progress() -> Progress:
         TextColumn("[progress.description]{task.description}"),
         console=console,
     )
+
+
+def unique_output_dir(base: Path) -> Path:
+    """Return *base* if it doesn't exist, otherwise append -1, -2, ... until free."""
+    if not base.exists():
+        return base
+    parent = base.parent
+    name = base.name
+    counter = 1
+    while True:
+        candidate = parent / f"{name}-{counter}"
+        if not candidate.exists():
+            print_info(f"Directory '{base}' exists, using '{candidate}' instead")
+            return candidate
+        counter += 1
