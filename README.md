@@ -20,6 +20,12 @@ uv tool install omnivorous
 
 This makes the `omni` command available globally.
 
+For scientific documents with LaTeX formula extraction:
+
+```bash
+pip install omnivorous[scientific]
+```
+
 ## Quick Start
 
 ```bash
@@ -41,7 +47,7 @@ omni pack docs/ --agent all
 
 omnivorous processes documents through a four-stage pipeline:
 
-1. **Convert** — Each format has a dedicated converter that produces clean Markdown. PDFs get ligature repair and header/footer removal; HTML gets nav, script, and boilerplate stripping; DOCX preserves structure while dropping styling.
+1. **Convert** — Each format has a dedicated converter that produces clean Markdown. PDFs use pymupdf4llm for accurate layout extraction with ligature repair and header/footer removal (or marker-pdf in `--mode scientific` for LaTeX formula reconstruction); HTML gets nav, script, and boilerplate stripping; DOCX preserves structure while dropping styling.
 2. **Extract metadata** — Page count, headings, tables, and token count are recorded as YAML frontmatter.
 3. **Chunk** — Documents are split by heading structure or by token budget, keeping sections coherent and right-sized for agent context windows.
 4. **Pack** — An agent instruction file, project context summary, file manifest, and chunked docs are assembled into a ready-to-use context pack.
@@ -56,7 +62,7 @@ omnivorous processes documents through a four-stage pipeline:
 
 ## Commands
 
-All commands accept `--encoding` to select the tiktoken encoding used for token counting (default: `o200k_base`).
+All commands accept `--encoding` to select the tiktoken encoding used for token counting (default: `o200k_base`) and `--mode` / `-m` to select the PDF conversion engine.
 
 ### `omni pack <folder>`
 Generate a full agent context pack with:
@@ -80,6 +86,7 @@ omni pack docs/ --agent all
 Options:
 - `-o, --output`: Output directory for agent context
 - `-a, --agent`: Target agent(s) — can be specified multiple times (default: `claude`)
+- `-m, --mode`: PDF conversion mode — `fast` (default, pymupdf4llm) or `scientific` (marker-pdf with LaTeX formula extraction)
 - `--chunk-size`: Target chunk size in tokens (default: 500)
 - `--chunk-by`: Strategy — `heading` or `tokens` (default: heading)
 - `--encoding`: Tiktoken encoding name (default: `o200k_base`)
@@ -105,6 +112,7 @@ omni ingest docs/ -o output/
 
 Options:
 - `-o, --output`: Output directory
+- `-m, --mode`: PDF conversion mode — `fast` (default) or `scientific`
 - `--encoding`: Tiktoken encoding name (default: `o200k_base`)
 
 ### `omni convert <file>`
@@ -115,10 +123,14 @@ omni convert document.pdf -o output.md
 
 # Use a different token encoding
 omni convert document.pdf --encoding cl100k_base -o output.md
+
+# Use scientific mode for LaTeX formulas
+omni convert paper.pdf --mode scientific -o output.md
 ```
 
 Options:
 - `-o, --output`: Output file path
+- `-m, --mode`: PDF conversion mode — `fast` (default) or `scientific`
 - `--encoding`: Tiktoken encoding name (default: `o200k_base`)
 
 ### `omni inspect <file>`
@@ -132,7 +144,23 @@ omni inspect document.pdf --encoding cl100k_base
 ```
 
 Options:
+- `-m, --mode`: PDF conversion mode — `fast` (default) or `scientific`
 - `--encoding`: Tiktoken encoding name (default: `o200k_base`)
+
+## PDF Conversion Modes
+
+omnivorous supports two PDF conversion engines, selected via the `--mode` / `-m` flag:
+
+| Mode | Use case | ML required |
+|------|----------|-------------|
+| `fast` (default) | General documents — accurate layout, tables, ligature repair, header/footer removal | No |
+| `scientific` | Research papers — LaTeX formula reconstruction (`$...$`, `$$...$$`), advanced layout analysis | Yes (lightweight, not a VLM) |
+
+The `scientific` mode requires the optional `[scientific]` extra:
+
+```bash
+pip install omnivorous[scientific]
+```
 
 ## Token Encoding
 
