@@ -8,7 +8,7 @@ from typing import Optional
 import typer
 from rich.table import Table
 
-from omnivorous.output import console, get_progress, print_error, print_info, print_success
+from omnivorous.output import console, get_progress, print_error, print_info, print_success, unique_output_dir
 
 app = typer.Typer(
     name="omni",
@@ -85,7 +85,7 @@ def ingest(
         print_error(f"Not a directory: {folder}")
         raise typer.Exit(1)
 
-    out_dir = output or Path("output")
+    out_dir = unique_output_dir(output or Path("output"))
     out_dir.mkdir(parents=True, exist_ok=True)
     exts = set(supported_extensions())
     files = sorted(f for f in folder.rglob("*") if f.is_file() and f.suffix.lower() in exts)
@@ -192,7 +192,7 @@ def pack(
         print_error(str(exc))
         raise typer.Exit(1)
 
-    out_dir = output or Path("agent-context")
+    out_dir = unique_output_dir(output or Path("agent-context"))
 
     with get_progress() as progress:
         progress.add_task("Packing agent context...", total=None)
