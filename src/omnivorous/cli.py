@@ -28,17 +28,46 @@ def _apply_encoding(encoding: str) -> None:
         raise typer.Exit(1)
 
 
+def _apply_mode(mode: str) -> None:
+    """Validate and set the PDF engine based on conversion mode."""
+    from omnivorous.converters.pdf import set_pdf_engine
+
+    mode_to_engine = {"fast": "pymupdf", "scientific": "marker"}
+    if mode not in mode_to_engine:
+        print_error(f"Unknown mode: {mode!r}. Valid: fast, scientific")
+        raise typer.Exit(1)
+
+    engine = mode_to_engine[mode]
+    if engine == "marker":
+        try:
+            import marker  # noqa: F401
+        except ImportError:
+            print_error(
+                "Scientific mode requires marker-pdf. "
+                "Install with: pip install omnivorous[scientific]"
+            )
+            raise typer.Exit(1)
+
+    try:
+        set_pdf_engine(engine)
+    except ValueError as exc:
+        print_error(str(exc))
+        raise typer.Exit(1)
+
+
 @app.command()
 def convert(
     file: Path = typer.Argument(..., help="Path to the document to convert."),
     output: Optional[Path] = typer.Option(None, "-o", "--output", help="Output file path."),
     encoding: str = typer.Option("o200k_base", "--encoding", help="Tiktoken encoding name."),
+    mode: str = typer.Option("fast", "--mode", "-m", help="PDF mode: fast (default) or scientific (LaTeX formulas)."),
 ) -> None:
     """Convert a single document to Markdown."""
     from omnivorous.frontmatter import add_frontmatter
     from omnivorous.registry import ensure_registry_loaded, get_converter
 
     _apply_encoding(encoding)
+    _apply_mode(mode)
     ensure_registry_loaded()
 
     if not file.exists():
@@ -73,12 +102,14 @@ def ingest(
     folder: Path = typer.Argument(..., help="Folder containing documents to convert."),
     output: Optional[Path] = typer.Option(None, "-o", "--output", help="Output directory."),
     encoding: str = typer.Option("o200k_base", "--encoding", help="Tiktoken encoding name."),
+    mode: str = typer.Option("fast", "--mode", "-m", help="PDF mode: fast (default) or scientific (LaTeX formulas)."),
 ) -> None:
     """Scan a folder and convert all supported documents to Markdown."""
     from omnivorous.frontmatter import add_frontmatter
     from omnivorous.registry import ensure_registry_loaded, get_converter, supported_extensions
 
     _apply_encoding(encoding)
+    _apply_mode(mode)
     ensure_registry_loaded()
 
     if not folder.is_dir():
@@ -119,11 +150,13 @@ def ingest(
 def inspect(
     file: Path = typer.Argument(..., help="File to inspect."),
     encoding: str = typer.Option("o200k_base", "--encoding", help="Tiktoken encoding name."),
+    mode: str = typer.Option("fast", "--mode", "-m", help="PDF mode: fast (default) or scientific (LaTeX formulas)."),
 ) -> None:
     """Display metadata for a document."""
     from omnivorous.inspector import inspect_file
 
     _apply_encoding(encoding)
+    _apply_mode(mode)
 
     if not file.exists():
         print_error(f"File not found: {file}")
@@ -172,12 +205,14 @@ def pack(
     agent: Optional[list[str]] = typer.Option(
         None, "--agent", "-a", help="Target agent(s): claude, codex, cursor, copilot, antigravity, or all."
     ),
+    mode: str = typer.Option("fast", "--mode", "-m", help="PDF mode: fast (default) or scientific (LaTeX formulas)."),
 ) -> None:
     """Generate an agent context pack from a folder of documents."""
     from omnivorous.agents import resolve_agents
     from omnivorous.packer import pack_context
 
     _apply_encoding(encoding)
+    _apply_mode(mode)
 
     if not folder.is_dir():
         print_error(f"Not a directory: {folder}")
