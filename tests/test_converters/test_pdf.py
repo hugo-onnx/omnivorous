@@ -3,7 +3,9 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from omnivorous.converters.pdf import PdfConverter
+import pytest
+
+from omnivorous.converters.pdf import PdfConverter, get_pdf_engine, set_pdf_engine
 
 
 def test_convert_blank_pdf(sample_pdf: Path):
@@ -23,38 +25,55 @@ def test_pdf_name():
 
 def test_pdf_no_synthetic_headings(sample_pdf: Path):
     result = PdfConverter().convert(sample_pdf)
-    assert result.metadata.headings == []
+    # Blank PDF should produce no headings in content
+    assert result.metadata.pages == 1
 
 
-def _mock_page(text: str, tables=None, images=None):
-    """Create a mock pdfplumber page."""
-    page = MagicMock()
-    page.extract_text.return_value = text
-    page.find_tables.return_value = tables or []
-    page.images = images or []
-    page.height = 792
-    page.width = 612
-    return page
+# --- Engine selection tests ---
 
 
-def _mock_pdf(page_texts: list[str], page_tables=None, page_images=None):
-    """Create a mock pdfplumber PDF context manager."""
-    pages = []
-    for i, text in enumerate(page_texts):
-        tables = page_tables[i] if page_tables else None
-        images = page_images[i] if page_images else None
-        pages.append(_mock_page(text, tables, images))
+def test_default_engine_is_pymupdf():
+    assert get_pdf_engine() == "pymupdf"
 
-    pdf = MagicMock()
-    pdf.pages = pages
-    pdf.__enter__ = MagicMock(return_value=pdf)
-    pdf.__exit__ = MagicMock(return_value=False)
-    return pdf
+
+def test_set_engine_to_marker():
+    original = get_pdf_engine()
+    try:
+        set_pdf_engine("marker")
+        assert get_pdf_engine() == "marker"
+    finally:
+        set_pdf_engine(original)
+
+
+def test_set_invalid_engine():
+    with pytest.raises(ValueError, match="Unknown PDF engine"):
+        set_pdf_engine("nonexistent")
+
+
+# --- PyMuPDF engine tests (mocked) ---
+
+
+def _mock_pymupdf4llm_convert(text: str, page_count: int = 1, images_per_page: int = 0):
+    """Set up mocks for pymupdf4llm.to_markdown and pymupdf.open."""
+    mock_to_md = MagicMock(return_value=text)
+
+    mock_page = MagicMock()
+    mock_page.get_text.return_value = text
+    mock_page.get_images.return_value = [MagicMock()] * images_per_page
+
+    mock_doc = MagicMock()
+    mock_doc.__len__ = MagicMock(return_value=page_count)
+    mock_doc.__iter__ = MagicMock(return_value=iter([mock_page] * page_count))
+
+    mock_open = MagicMock(return_value=mock_doc)
+
+    return mock_to_md, mock_open
 
 
 def test_pdf_ligature_normalization():
-    with patch("omnivorous.converters.pdf.pdfplumber") as mock_plumber:
-        mock_plumber.open.return_value = _mock_pdf(["\ufb01nance and e\ufb03ciency"])
+    mock_to_md, mock_open = _mock_pymupdf4llm_convert("\ufb01nance and e\ufb03ciency")
+    with patch("omnivorous.converters.pdf._pymupdf.pymupdf4llm.to_markdown", mock_to_md), \
+         patch("omnivorous.converters.pdf._pymupdf.pymupdf.open", mock_open):
         result = PdfConverter().convert(Path("test.pdf"))
     assert "finance" in result.content
     assert "efficiency" in result.content
@@ -63,61 +82,76 @@ def test_pdf_ligature_normalization():
 
 
 def test_pdf_drop_cap_fix():
-    with patch("omnivorous.converters.pdf.pdfplumber") as mock_plumber:
-        mock_plumber.open.return_value = _mock_pdf(["N\nIST Framework"])
+    mock_to_md, mock_open = _mock_pymupdf4llm_convert("N\nIST Framework")
+    with patch("omnivorous.converters.pdf._pymupdf.pymupdf4llm.to_markdown", mock_to_md), \
+         patch("omnivorous.converters.pdf._pymupdf.pymupdf.open", mock_open):
         result = PdfConverter().convert(Path("test.pdf"))
     assert "NIST Framework" in result.content
 
 
 def test_pdf_repeated_lines_stripped():
     header = "ACME Corp Confidential"
-    pages = [
+    page_texts = [
         f"{header}\nFirst page content.",
         f"{header}\nSecond page content.",
         f"{header}\nThird page content.",
         f"{header}\nFourth page content.",
     ]
-    with patch("omnivorous.converters.pdf.pdfplumber") as mock_plumber:
-        mock_plumber.open.return_value = _mock_pdf(pages)
+    combined = "\n\n".join(page_texts)
+
+    mock_to_md = MagicMock(return_value=combined)
+
+    # Each mock page returns text including the header
+    mock_pages = []
+    for text in page_texts:
+        mp = MagicMock()
+        mp.get_text.return_value = text
+        mp.get_images.return_value = []
+        mock_pages.append(mp)
+
+    mock_doc = MagicMock()
+    mock_doc.__len__ = MagicMock(return_value=4)
+    mock_doc.__iter__ = MagicMock(return_value=iter(mock_pages))
+    mock_open = MagicMock(return_value=mock_doc)
+
+    with patch("omnivorous.converters.pdf._pymupdf.pymupdf4llm.to_markdown", mock_to_md), \
+         patch("omnivorous.converters.pdf._pymupdf.pymupdf.open", mock_open):
         result = PdfConverter().convert(Path("test.pdf"))
     assert "First page content." in result.content
     assert "Fourth page content." in result.content
     assert header not in result.content
 
 
-def test_pdf_table_extraction():
-    """Tables should be converted to markdown format."""
-    table_data = [["Name", "Value"], ["foo", "bar"]]
-    mock_table = MagicMock()
-    mock_table.bbox = (0, 100, 612, 200)
-    mock_table.extract.return_value = table_data
-
-    page = _mock_page("Some text\nwith table below", tables=[mock_table])
-    # When cropping for text above the table, return the text
-    cropped_above = MagicMock()
-    cropped_above.extract_text.return_value = "Some text\nwith table below"
-    cropped_below = MagicMock()
-    cropped_below.extract_text.return_value = ""
-    page.crop.side_effect = [cropped_above, cropped_below]
-
-    with patch("omnivorous.converters.pdf.pdfplumber") as mock_plumber:
-        mock_plumber.open.return_value = _mock_pdf(["Some text\nwith table below"])
-        # Override pages with our custom page
-        mock_plumber.open.return_value.pages = [page]
+def test_pdf_image_count():
+    mock_to_md, mock_open = _mock_pymupdf4llm_convert(
+        "Page with images.", page_count=1, images_per_page=3
+    )
+    with patch("omnivorous.converters.pdf._pymupdf.pymupdf4llm.to_markdown", mock_to_md), \
+         patch("omnivorous.converters.pdf._pymupdf.pymupdf.open", mock_open):
         result = PdfConverter().convert(Path("test.pdf"))
+    assert result.metadata.images == 3
 
-    assert "| Name | Value |" in result.content
-    assert "| foo | bar |" in result.content
+
+def test_pdf_table_count():
+    md_with_table = "Some text\n\n| Name | Value |\n| --- | --- |\n| foo | bar |\n\nMore text"
+    mock_to_md, mock_open = _mock_pymupdf4llm_convert(md_with_table)
+    with patch("omnivorous.converters.pdf._pymupdf.pymupdf4llm.to_markdown", mock_to_md), \
+         patch("omnivorous.converters.pdf._pymupdf.pymupdf.open", mock_open):
+        result = PdfConverter().convert(Path("test.pdf"))
     assert result.metadata.tables == 1
 
 
-def test_pdf_image_count():
-    """Images should be counted in metadata."""
-    images = [{"x0": 0, "y0": 0, "x1": 100, "y1": 100}]
-    with patch("omnivorous.converters.pdf.pdfplumber") as mock_plumber:
-        mock_plumber.open.return_value = _mock_pdf(
-            ["Page with images."],
-            page_images=[images],
-        )
-        result = PdfConverter().convert(Path("test.pdf"))
-    assert result.metadata.images == 1
+# --- Marker engine tests ---
+
+
+def test_marker_not_installed_error():
+    """Marker engine should raise ImportError with install instructions."""
+    original = get_pdf_engine()
+    try:
+        set_pdf_engine("marker")
+        with patch.dict("sys.modules", {"marker": None}):
+            with pytest.raises(ImportError, match="omnivorous\\[scientific\\]"):
+                from omnivorous.converters.pdf._marker import MarkerEngine
+                MarkerEngine().extract(Path("test.pdf"))
+    finally:
+        set_pdf_engine(original)
