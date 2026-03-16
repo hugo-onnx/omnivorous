@@ -18,6 +18,16 @@ def test_extract_reference_candidates():
     assert "PaymentClient" in candidates["symbol"]
 
 
+def test_extract_reference_candidates_ignores_weak_identifiers():
+    candidates = extract_reference_candidates(
+        "Map DE.AE-03 and AE-04, but keep RFC-101."
+    )
+
+    assert "RFC-101" in candidates["identifier"]
+    assert "AE-03" not in candidates["identifier"]
+    assert "AE-04" not in candidates["identifier"]
+
+
 def test_resolve_references_matches_explicit_targets():
     index = build_reference_index(
         [
@@ -51,12 +61,14 @@ def test_resolve_references_matches_explicit_targets():
 
 def test_extract_reference_candidates_ignores_generic_symbols():
     candidates = extract_reference_candidates(
-        "Read `THE`, `III`, and `PaymentClient` before section 4."
+        "Read `THE`, `III`, `e.g`, `i.e`, and `PaymentClient` before section 4."
     )
 
     assert "PaymentClient" in candidates["symbol"]
     assert "THE" not in candidates["symbol"]
     assert "III" not in candidates["symbol"]
+    assert "e.g" not in candidates["symbol"]
+    assert "i.e" not in candidates["symbol"]
 
 
 def test_resolve_references_skips_ambiguous_or_low_confidence_sections():
@@ -90,3 +102,37 @@ def test_resolve_references_skips_ambiguous_or_low_confidence_sections():
     )
 
     assert resolved == {}
+
+
+def test_resolve_references_skips_weak_identifiers():
+    index = build_reference_index(
+        [
+            ReferenceTarget(
+                key="weak-doc",
+                path="docs/full/weak.md",
+                kind="document",
+                label="Weak",
+                group="docs/full/weak.md",
+                identifiers=("AE-03",),
+            ),
+            ReferenceTarget(
+                key="strong-doc",
+                path="docs/full/strong.md",
+                kind="document",
+                label="Strong",
+                group="docs/full/strong.md",
+                identifiers=("RFC-101",),
+            ),
+        ]
+    )
+
+    resolved = resolve_references(
+        "See AE-03 and RFC-101.",
+        index,
+        source_key="overview-doc",
+        source_group="docs/full/overview.md",
+        different_group_only=True,
+    )
+
+    assert "weak-doc" not in resolved
+    assert "strong-doc" in resolved
