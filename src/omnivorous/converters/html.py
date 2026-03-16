@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup, NavigableString, Tag
 from markdownify import markdownify
 
 from omnivorous.converters.base import BaseConverter
@@ -79,14 +79,21 @@ class HtmlConverter(BaseConverter):
 
         # Replace <img> tags with markdown image placeholders
         image_count = 0
+        image_placeholders: dict[str, str] = {}
         for img in scope.find_all("img"):
             alt = img.get("alt") or img.get("title") or "image"
-            img.replace_with(f"![{alt}]()")
+            token = f"OMNIVOROUSIMAGE{image_count}TOKEN"
+            image_placeholders[token] = f"![{alt}]()"
+            # Use plain-text sentinels and restore markdown after conversion so
+            # markdownify does not escape the placeholder syntax.
+            img.replace_with(NavigableString(f"\n\n{token}\n\n"))
             image_count += 1
 
         convert_html = str(main) if main else str(soup)
 
         content = markdownify(convert_html, heading_style="ATX")
+        for token, placeholder in image_placeholders.items():
+            content = content.replace(token, placeholder)
         # Clean up excessive whitespace
         content = re.sub(r"\n{3,}", "\n\n", content).strip()
 
