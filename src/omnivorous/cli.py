@@ -228,6 +228,26 @@ def pack(
         "--chunk-by",
         help="Chunking strategy: heading or tokens.",
     ),
+    semantic: bool = typer.Option(
+        False,
+        "--semantic",
+        help="Enable optional local-embedding relationships.",
+    ),
+    embedding_backend: str = typer.Option(
+        "fastembed",
+        "--embedding-backend",
+        help="Local embedding backend to use when --semantic is enabled.",
+    ),
+    embedding_model: Optional[str] = typer.Option(
+        None,
+        "--embedding-model",
+        help="Optional local embedding model name.",
+    ),
+    embedding_cache_dir: Optional[Path] = typer.Option(
+        None,
+        "--embedding-cache-dir",
+        help="Optional cache directory for local embeddings.",
+    ),
 ) -> None:
     """Generate an agent context pack from a folder of documents."""
     from omnivorous.agents import resolve_agents
@@ -258,8 +278,15 @@ def pack(
                 agents=agent_names,
                 chunk_size=chunk_size,
                 chunk_by=chunk_by,
+                enable_semantic=semantic,
+                embedding_backend=embedding_backend,
+                embedding_model=embedding_model,
+                embedding_cache_dir=embedding_cache_dir,
             )
         except ValueError as exc:
+            print_error(str(exc))
+            raise typer.Exit(1)
+        except ImportError as exc:
             print_error(str(exc))
             raise typer.Exit(1)
 
