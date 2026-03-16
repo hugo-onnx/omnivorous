@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Convert documents into agent-ready Markdown context for AI coding agents"
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 authors = [{ name = "omnivorous contributors" }]
 keywords = ["markdown", "ai", "agents", "documents", "converter"]
 classifiers = [
@@ -16,7 +16,6 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -44,7 +43,7 @@ Issues = "https://github.com/hugo-onnx/omnivorous/issues"
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "pytest-cov>=4.0", "ruff>=0.1"]
-scientific = ["marker-pdf>=1.0,<2.0; python_version>='3.10'"]
+scientific = ["marker-pdf>=1.0,<2.0"]
 
 [project.scripts]
 omni = "omnivorous.cli:app"
@@ -59,5 +58,5 @@ exclude = ["tests/", "CLAUDE.md", "text.txt", ".claude/", ".github/"]
 testpaths = ["tests"]
 
 [tool.ruff]
-target-version = "py39"
+target-version = "py310"
 line-length = 100
