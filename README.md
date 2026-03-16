@@ -26,6 +26,12 @@ For scientific documents with LaTeX formula extraction:
 pip install omnivorous[scientific]
 ```
 
+For optional local-embedding relationships without external APIs:
+
+```bash
+pip install omnivorous[semantic]
+```
+
 ## Quick Start
 
 ```bash
@@ -50,7 +56,7 @@ omnivorous processes documents through a three-stage pipeline:
 1. **Convert** — Each format has a dedicated converter that produces clean Markdown. PDFs use pymupdf4llm for accurate layout extraction with ligature repair and header/footer removal (or marker-pdf in `--mode scientific` for LaTeX formula reconstruction); HTML gets nav, script, and boilerplate stripping; DOCX preserves structure while dropping styling.
    When processing folders, omnivorous converts files in parallel by default where it is safe to do so.
 2. **Extract metadata** — Page count, headings, tables, and token count are recorded as YAML frontmatter.
-3. **Pack** — Agent instruction files, a project context map, a chunk-aware manifest, chunked docs, full converted docs, and deterministic cross-document relationship hints are assembled into a ready-to-use context pack. Relationships combine explicit references like file paths, IDs, and section numbers with lexical similarity, without relying on third-party LLMs.
+3. **Pack** — Agent instruction files, a project context map, a chunk-aware manifest, chunked docs, full converted docs, and deterministic cross-document relationship hints are assembled into a ready-to-use context pack. Relationships combine explicit references like file paths, IDs, and section numbers with lexical similarity by default, and can optionally add local embeddings without relying on third-party LLM APIs.
 
 ## Supported Formats
 
@@ -90,6 +96,10 @@ Options:
 - `-m, --mode`: PDF conversion mode — `fast` (default, pymupdf4llm) or `scientific` (marker-pdf with LaTeX formula extraction)
 - `--chunk-size`: Target chunk size in tokens (default: 500)
 - `--chunk-by`: Strategy — `heading` or `tokens` (default: heading)
+- `--semantic`: Enable optional local-embedding relationships
+- `--embedding-backend`: Local embedding backend (default: `fastembed`)
+- `--embedding-model`: Optional local embedding model name
+- `--embedding-cache-dir`: Optional cache directory for local embeddings
 - `--encoding`: Tiktoken encoding name (default: `o200k_base`)
 
 #### Supported Agents
