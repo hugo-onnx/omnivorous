@@ -48,9 +48,9 @@ omni pack docs/ --agent all
 omnivorous processes documents through a four-stage pipeline:
 
 1. **Convert** — Each format has a dedicated converter that produces clean Markdown. PDFs use pymupdf4llm for accurate layout extraction with ligature repair and header/footer removal (or marker-pdf in `--mode scientific` for LaTeX formula reconstruction); HTML gets nav, script, and boilerplate stripping; DOCX preserves structure while dropping styling.
+   When processing folders, omnivorous converts files in parallel by default where it is safe to do so.
 2. **Extract metadata** — Page count, headings, tables, and token count are recorded as YAML frontmatter.
-3. **Chunk** — Documents are split by heading structure or by token budget, keeping sections coherent and right-sized for agent context windows.
-4. **Pack** — An agent instruction file, project context summary, file manifest, and chunked docs are assembled into a ready-to-use context pack.
+3. **Pack** — An agent instruction file, project context summary, file manifest, and chunked docs are assembled into a ready-to-use context pack.
 
 ## Supported Formats
 
