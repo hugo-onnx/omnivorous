@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -31,7 +32,11 @@ from omnivorous.references import (
     extract_symbols,
     resolve_references,
 )
-from omnivorous.relationships import RelationshipNode, build_relationships, extract_keywords
+from omnivorous.relationships import (
+    RelationshipNode,
+    build_relationships,
+    tokenize,
+)
 from omnivorous.registry import ensure_registry_loaded
 from omnivorous.tokens import count_tokens
 
@@ -50,6 +55,28 @@ _LOW_SIGNAL_RELATIONSHIP_TERMS = {
     "project",
     "trademark",
 }
+_GENERIC_SEMANTIC_ANCHOR_TERMS = {
+    "abstract",
+    "appendix",
+    "chapter",
+    "contents",
+    "figure",
+    "html",
+    "index",
+    "introduction",
+    "markdown",
+    "notice",
+    "overview",
+    "pdf",
+    "section",
+    "table",
+    "text",
+    "txt",
+    "version",
+}
+_SEMANTIC_MIN_SHARED_TERMS = 2
+_SEMANTIC_ONLY_SCORE_FLOOR = 0.8
+_SEMANTIC_ANCHOR_SCORE_FLOOR = 0.6
 
 
 def _normalize_heading(heading: str) -> str:
@@ -58,6 +85,19 @@ def _normalize_heading(heading: str) -> str:
 
 def _heading_samples(headings: list[str], limit: int = 4) -> list[str]:
     return [_normalize_heading(heading) for heading in headings[:limit]]
+
+
+def _fallback_heading_samples(chunks: list[dict[str, Any]], limit: int = 4) -> list[str]:
+    samples: list[str] = []
+    for chunk in chunks:
+        heading = chunk["heading"].strip()
+        if not heading or heading == "```" or heading.startswith("[!["):
+            continue
+        if heading not in samples:
+            samples.append(heading)
+        if len(samples) >= limit:
+            break
+    return samples
 
 
 def _dedupe_preserve_order(values: list[str]) -> list[str]:
@@ -97,6 +137,32 @@ def _chunk_preview(chunk: str, fallback: str) -> str:
     return fallback[:160]
 
 
+def _document_keywords(
+    title: str,
+    headings: list[str],
+    chunks: list[dict[str, Any]],
+    *,
+    body_sample: str = "",
+    limit: int = 8,
+) -> list[str]:
+    weighted: Counter[str] = Counter()
+    for token in tokenize(title):
+        weighted[token] += 6
+    for heading in headings[:8]:
+        for token in tokenize(heading):
+            weighted[token] += 4
+    for chunk in chunks[:6]:
+        for token in tokenize(chunk["heading"]):
+            weighted[token] += 3
+        for token in tokenize(chunk["preview"]):
+            weighted[token] += 2
+    for token in tokenize(body_sample[:1500]):
+        weighted[token] += 1
+
+    ranked = sorted(weighted.items(), key=lambda item: (-item[1], item[0]))
+    return [term for term, _ in ranked[:limit]]
+
+
 def _is_low_signal_relationship_chunk(text: str) -> bool:
     lowered = text.lower()
     if "project gutenberg" in lowered:
@@ -108,6 +174,89 @@ def _is_low_signal_relationship_chunk(text: str) -> bool:
         if re.search(rf"\b{re.escape(term)}\b", lowered)
     }
     return len(matched_terms) >= 4
+
+
+def _semantic_anchor_overlap(
+    source_entry: dict[str, Any],
+    target_entry: dict[str, Any],
+    *,
+    keyword_document_frequency: Counter[str] | None = None,
+    max_frequency: int | None = None,
+    limit: int = 4,
+) -> list[str]:
+    target_keywords = set(target_entry.get("keywords", []))
+    overlap: list[str] = []
+    for keyword in source_entry.get("keywords", []):
+        if keyword not in target_keywords:
+            continue
+        if keyword in _LOW_SIGNAL_RELATIONSHIP_TERMS:
+            continue
+        if keyword in _GENERIC_SEMANTIC_ANCHOR_TERMS:
+            continue
+        if (
+            keyword_document_frequency is not None
+            and max_frequency is not None
+            and keyword_document_frequency.get(keyword, 0) > max_frequency
+        ):
+            continue
+        overlap.append(keyword)
+    return overlap[:limit]
+
+
+def _filter_document_relationships(
+    documents: list[dict[str, Any]],
+    document_edges: dict[str, list[dict[str, Any]]],
+    *,
+    limit: int = 3,
+) -> dict[str, list[dict[str, Any]]]:
+    document_lookup = {document["full_path"]: document for document in documents}
+    keyword_document_frequency: Counter[str] = Counter()
+    for document in documents:
+        keyword_document_frequency.update(set(document.get("keywords", [])))
+    max_frequency = max(2, len(documents) // 10)
+    filtered: dict[str, list[dict[str, Any]]] = {}
+
+    for source_path, edges in document_edges.items():
+        source_entry = document_lookup[source_path]
+        kept: list[dict[str, Any]] = []
+        for edge in edges:
+            if edge["relationship_type"] != "semantic_similarity":
+                kept.append(edge)
+                continue
+
+            target_entry = document_lookup.get(edge["target_path"])
+            if target_entry is None:
+                continue
+
+            semantic_score = edge["signal_scores"].get("semantic_similarity", edge["score"])
+            shared_terms = _semantic_anchor_overlap(
+                source_entry,
+                target_entry,
+                keyword_document_frequency=keyword_document_frequency,
+                max_frequency=max_frequency,
+            )
+            if shared_terms and not edge["evidence"]["shared_terms"]:
+                edge["evidence"]["shared_terms"] = shared_terms
+
+            if semantic_score >= _SEMANTIC_ONLY_SCORE_FLOOR:
+                kept.append(edge)
+                continue
+            if (
+                len(shared_terms) >= _SEMANTIC_MIN_SHARED_TERMS
+                and semantic_score >= _SEMANTIC_ANCHOR_SCORE_FLOOR
+            ):
+                kept.append(edge)
+
+        kept.sort(
+            key=lambda edge: (
+                -edge["score"],
+                edge["target_kind"],
+                edge["target_path"],
+            )
+        )
+        filtered[source_path] = kept[:limit]
+
+    return filtered
 
 
 def _coerce_document_entries(
@@ -128,10 +277,7 @@ def _coerce_document_entries(
         entry["full_path"] = meta.source
         entry["chunk_count"] = 0
         entry["chunks"] = []
-        entry["keywords"] = extract_keywords(
-            meta.title,
-            *[_normalize_heading(heading) for heading in meta.headings[:12]],
-        )
+        entry["keywords"] = _document_keywords(meta.title, _heading_samples(meta.headings), [])
         entry["heading_samples"] = _heading_samples(meta.headings)
         entry["related_documents"] = []
         if original_sources and index < len(original_sources):
@@ -577,6 +723,7 @@ def pack_context(
         )
         chunk_count = len(chunk_result.chunks)
         chunk_entries: list[dict[str, Any]] = []
+        representative_chunks: list[dict[str, Any]] = []
         normalized_headings = [_normalize_heading(heading) for heading in result.metadata.headings]
         document_identifiers = extract_identifiers(
             "\n".join([result.metadata.title, *normalized_headings, result.content])
@@ -638,6 +785,10 @@ def pack_context(
                 "related_chunks": [],
             })
             if not low_signal_relationship_chunk:
+                representative_chunks.append({
+                    "heading": chunk_heading,
+                    "preview": chunk_preview,
+                })
                 chunk_nodes.append(
                     RelationshipNode(
                         key=chunk_path,
@@ -686,17 +837,22 @@ def pack_context(
                     )
                 )
 
+        heading_samples = _heading_samples(result.metadata.headings)
+        if not heading_samples:
+            heading_samples = _fallback_heading_samples(representative_chunks)
         document_entries[index] = {
             **result.metadata.to_dict(),
             "original_source": original_source,
             "full_path": full_doc_path,
             "chunk_count": chunk_count,
             "chunks": chunk_entries,
-            "keywords": extract_keywords(
+            "keywords": _document_keywords(
                 result.metadata.title,
-                *[_normalize_heading(heading) for heading in result.metadata.headings[:12]],
+                heading_samples,
+                representative_chunks,
+                body_sample=result.content,
             ),
-            "heading_samples": _heading_samples(result.metadata.headings),
+            "heading_samples": heading_samples,
             "related_documents": [],
         }
         document_reference_targets.append(
@@ -765,6 +921,7 @@ def pack_context(
         _document_target_lookup(documents),
         semantic_relationships=document_semantic_relationships,
     )
+    document_edges = _filter_document_relationships(documents, document_edges)
     for path, edges in document_edges.items():
         document_lookup[path]["related_documents"] = edges
 
