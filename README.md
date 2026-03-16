@@ -4,7 +4,7 @@
 
 > Turn your documents into agent-ready Markdown context.
 
-omnivorous converts PDF, DOCX, HTML, Markdown, and plain text files into clean, structured Markdown that AI coding agents can consume directly. It handles format-specific cleanup, extracts metadata, counts tokens, and chunks documents intelligently — so your agents get the context they need without the noise.
+omnivorous converts PDF, DOCX, HTML, Markdown, and plain text files into clean, structured Markdown that AI coding agents can consume directly. It handles format-specific cleanup, extracts metadata, counts tokens, chunks documents intelligently, and builds navigation and relationship files that help agents read less and find the right context faster.
 
 ## Install
 
@@ -50,7 +50,7 @@ omnivorous processes documents through a four-stage pipeline:
 1. **Convert** — Each format has a dedicated converter that produces clean Markdown. PDFs use pymupdf4llm for accurate layout extraction with ligature repair and header/footer removal (or marker-pdf in `--mode scientific` for LaTeX formula reconstruction); HTML gets nav, script, and boilerplate stripping; DOCX preserves structure while dropping styling.
    When processing folders, omnivorous converts files in parallel by default where it is safe to do so.
 2. **Extract metadata** — Page count, headings, tables, and token count are recorded as YAML frontmatter.
-3. **Pack** — An agent instruction file, project context summary, file manifest, and chunked docs are assembled into a ready-to-use context pack.
+3. **Pack** — Agent instruction files, a project context map, a chunk-aware manifest, chunked docs, full converted docs, and deterministic cross-document relationship hints are assembled into a ready-to-use context pack.
 
 ## Supported Formats
 
@@ -67,9 +67,10 @@ All commands accept `--encoding` to select the tiktoken encoding used for token 
 ### `omni pack <folder>`
 Generate a full agent context pack with:
 - Agent instruction file (varies by target agent)
-- `PROJECT_CONTEXT.md` — Documentation summary
-- `manifest.json` — File manifest
-- `docs/` — Converted and chunked documents
+- `PROJECT_CONTEXT.md` — Documentation map, navigation hints, and cross-document bridges
+- `manifest.json` — Chunk-aware file manifest with deterministic relationship metadata
+- `docs/chunks/` — Focused context for agents
+- `docs/full/` — Full converted documents for fallback reading
 
 ```bash
 # Generate for a specific agent
