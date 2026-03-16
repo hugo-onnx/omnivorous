@@ -226,3 +226,23 @@ def test_pack_with_invalid_chunk_strategy(fixtures_dir: Path, tmp_path: Path):
         ["pack", str(fixtures_dir), "-o", str(out), "--chunk-by", "invalid"],
     )
     assert result.exit_code == 1
+
+
+def test_pack_with_semantic_mode_missing_backend(fixtures_dir: Path, tmp_path: Path):
+    from unittest.mock import patch
+
+    out = tmp_path / "agent-ctx"
+    with patch(
+        "omnivorous.embeddings.LocalEmbeddingService._resolve_backend",
+        side_effect=ImportError(
+            "Semantic mode requires local embedding support. "
+            "Use `uv sync --extra semantic` or run once with "
+            "`uv run --extra semantic omni pack ...`. "
+            "With pip, install `omnivorous[semantic]`."
+        ),
+    ):
+        result = runner.invoke(app, ["pack", str(fixtures_dir), "-o", str(out), "--semantic"])
+    assert result.exit_code == 1
+    assert "uv sync --extra semantic" in result.output
+    assert "uv run --extra semantic omni pack" in result.output
+    assert "omnivorous[semantic]" in result.output
