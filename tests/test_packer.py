@@ -9,6 +9,7 @@ from omnivorous.embeddings import LocalEmbeddingService
 from omnivorous.models import DocumentMetadata
 from omnivorous.agents import AGENT_TARGETS
 from omnivorous.packer import (
+    _filter_document_relationships,
     generate_agent_instructions,
     generate_claude_md,
     generate_manifest,
@@ -26,6 +27,36 @@ class _FakeEmbeddingBackend:
             lowered = text.lower()
             if "alpha" in lowered or "beta" in lowered:
                 vectors.append([1.0, 0.0])
+            else:
+                vectors.append([0.0, 1.0])
+        return vectors
+
+
+class _ModerateSemanticBackend:
+    def embed(self, texts: list[str], *, model_name: str | None = None) -> list[list[float]]:
+        del model_name
+        vectors: list[list[float]] = []
+        for text in texts:
+            lowered = text.lower()
+            if "cache" in lowered or "http" in lowered:
+                vectors.append([1.0, 0.0])
+            elif "tax" in lowered or "return" in lowered:
+                vectors.append([0.6, 0.8])
+            else:
+                vectors.append([0.0, 1.0])
+        return vectors
+
+
+class _GenericAnchorSemanticBackend:
+    def embed(self, texts: list[str], *, model_name: str | None = None) -> list[list[float]]:
+        del model_name
+        vectors: list[list[float]] = []
+        for text in texts:
+            lowered = text.lower()
+            if "protocol" in lowered:
+                vectors.append([1.0, 0.0])
+            elif "cybersecurity" in lowered:
+                vectors.append([0.6, 0.8])
             else:
                 vectors.append([0.0, 1.0])
         return vectors
@@ -379,6 +410,100 @@ def test_pack_context_uses_external_default_embedding_cache(
     assert recorded["cache_dir"] != out / ".omnivorous-cache"
     assert out not in recorded["cache_dir"].parents
     assert not (out / ".omnivorous-cache").exists()
+
+
+def test_pack_context_filters_moderate_semantic_false_positives(tmp_path: Path):
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "http-caching.md").write_text(
+        "# HTTP caching\n\nCache-Control and ETag validation rules.\n"
+    )
+    (source / "tax-form.txt").write_text(
+        "Tax return filing instructions and withholding details.\n"
+    )
+
+    embedding_service = LocalEmbeddingService(
+        cache_dir=tmp_path / "embeddings-cache",
+        backend_name="moderate",
+        backend=_ModerateSemanticBackend(),
+    )
+
+    out = tmp_path / "agent-context"
+    pack_context(
+        source,
+        out,
+        chunk_size=20,
+        chunk_by="tokens",
+        enable_semantic=True,
+        embedding_service=embedding_service,
+    )
+
+    manifest = json.loads((out / "manifest.json").read_text())
+    caching = next(doc for doc in manifest["documents"] if doc["title"] == "HTTP caching")
+    assert caching["related_documents"] == []
+
+
+def test_pack_context_ignores_generic_anchor_terms_for_semantic_edges(tmp_path: Path):
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "protocol.md").write_text(
+        "# Protocol Handbook\n\n## Abstract\n\nHTTP message framing details.\n"
+    )
+    (source / "cybersecurity.md").write_text(
+        "# Cybersecurity Playbook\n\n## Abstract\n\nRisk assessment guidance.\n"
+    )
+
+    embedding_service = LocalEmbeddingService(
+        cache_dir=tmp_path / "embeddings-cache",
+        backend_name="generic-anchor",
+        backend=_GenericAnchorSemanticBackend(),
+    )
+
+    out = tmp_path / "agent-context"
+    pack_context(
+        source,
+        out,
+        chunk_size=20,
+        chunk_by="tokens",
+        enable_semantic=True,
+        embedding_service=embedding_service,
+    )
+
+    manifest = json.loads((out / "manifest.json").read_text())
+    protocol = next(doc for doc in manifest["documents"] if doc["title"] == "Protocol Handbook")
+    assert protocol["related_documents"] == []
+
+
+def test_filter_document_relationships_requires_multiple_anchor_terms():
+    documents = [
+        {
+            "full_path": "docs/full/source.md",
+            "keywords": ["client", "sdk", "telemetry"],
+        },
+        {
+            "full_path": "docs/full/target.md",
+            "keywords": ["client", "http", "protocol"],
+        },
+    ]
+    edges = {
+        "docs/full/source.md": [
+            {
+                "target_path": "docs/full/target.md",
+                "target_kind": "document",
+                "target_title": "target",
+                "target_heading": None,
+                "relationship_type": "semantic_similarity",
+                "score": 0.66,
+                "signal_scores": {"semantic_similarity": 0.66},
+                "evidence": {"shared_terms": [], "references": []},
+            }
+        ],
+        "docs/full/target.md": [],
+    }
+
+    filtered = _filter_document_relationships(documents, edges)
+
+    assert filtered["docs/full/source.md"] == []
 
 
 # --- resolve_output_paths unit tests ---
