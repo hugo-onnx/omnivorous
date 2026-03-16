@@ -100,6 +100,7 @@ Options:
 - `--embedding-backend`: Local embedding backend (default: `fastembed`)
 - `--embedding-model`: Optional local embedding model name
 - `--embedding-cache-dir`: Optional cache directory for local embeddings
+  By default, semantic mode uses a user-level cache outside the generated pack so cache files do not pollute the shipped artifact.
 - `--encoding`: Tiktoken encoding name (default: `o200k_base`)
 
 #### Supported Agents
