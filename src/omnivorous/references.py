@@ -35,10 +35,13 @@ _GENERIC_SYMBOLS = {
     "chorus",
     "copyright",
     "distribute",
+    "e.g",
     "ebook",
+    "etc",
     "first",
     "full",
     "gutenberg",
+    "i.e",
     "king",
     "license",
     "prince",
@@ -99,7 +102,11 @@ class ReferenceIndex:
 
 def extract_identifiers(text: str) -> list[str]:
     """Extract uppercase identifier references like RFC-001."""
-    return _dedupe(_IDENTIFIER_RE.findall(text.upper()))
+    return _dedupe(
+        identifier
+        for identifier in _IDENTIFIER_RE.findall(text.upper())
+        if _is_high_confidence_identifier(identifier)
+    )
 
 
 def extract_section_numbers(text: str) -> list[str]:
@@ -342,6 +349,21 @@ def _normalize_identifier(identifier: str) -> str:
     return identifier.strip().upper()
 
 
+def _is_high_confidence_identifier(identifier: str) -> bool:
+    normalized = _normalize_identifier(identifier)
+    if "-" not in normalized:
+        return False
+
+    prefix, numeric = normalized.rsplit("-", 1)
+    prefix = prefix.strip()
+    numeric = numeric.strip()
+    if not prefix or not numeric.isdigit():
+        return False
+
+    # Two-letter control IDs like AE-03 are too ambiguous across mixed corpora.
+    return len(prefix) >= 3
+
+
 def _normalize_heading(heading: str) -> str:
     normalized = re.sub(r"[^a-z0-9]+", " ", heading.lower()).strip()
     return re.sub(r"\s+", " ", normalized)
@@ -360,7 +382,7 @@ def _is_symbol_like(symbol: str) -> bool:
         return False
     if "." in normalized:
         parts = normalized.split(".")
-        if all(part.isalpha() and part.upper() == part and len(part) == 1 for part in parts):
+        if all(part.isalpha() and len(part) == 1 for part in parts):
             return False
         return any(any(ch.islower() for ch in part) for part in parts)
     if "_" in normalized:
