@@ -14,6 +14,7 @@ from omnivorous.converters.pdf._postprocess import (
     fix_drop_caps,
     normalize_ligatures,
     strip_lines,
+    strip_toc,
 )
 
 # Regex to count markdown tables (header + separator row)
@@ -32,9 +33,10 @@ class PyMuPdfEngine:
         # Extract markdown via pymupdf4llm
         raw_md: str = pymupdf4llm.to_markdown(str(path))
 
-        # Post-process: ligatures, drop caps
+        # Post-process: ligatures, drop caps, TOC
         content = normalize_ligatures(raw_md)
         content = fix_drop_caps(content)
+        content = strip_toc(content)
 
         # Open with pymupdf for metadata
         doc = pymupdf.open(str(path))
