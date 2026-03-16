@@ -1,5 +1,6 @@
 """Tests for PDF converter."""
 
+import contextlib
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -155,6 +156,38 @@ def test_marker_not_installed_error():
                 MarkerEngine().extract(Path("test.pdf"))
     finally:
         set_pdf_engine(original)
+
+
+def test_marker_models_are_cached():
+    from omnivorous.converters.pdf import _marker as marker_module
+
+    rendered = MagicMock(markdown="# Paper", metadata={"pages": 2})
+    create_model_dict = MagicMock(return_value={"models": "cached"})
+    artifact_dicts = []
+    call_paths = []
+
+    class FakePdfConverter:
+        def __init__(self, artifact_dict):
+            artifact_dicts.append(artifact_dict)
+
+        def __call__(self, path: str):
+            call_paths.append(path)
+            return rendered
+
+    with patch.object(marker_module, "_MARKER_MODELS", None), \
+         patch.object(marker_module, "_MARKER_CONVERTER", None), \
+         patch.object(marker_module, "_ensure_marker"), \
+         patch.object(marker_module, "_load_marker_components", return_value=(FakePdfConverter, create_model_dict)), \
+         patch.object(marker_module, "_suppress_tqdm", return_value=contextlib.nullcontext()):
+        engine = marker_module.MarkerEngine()
+        first = engine.extract(Path("first.pdf"))
+        second = engine.extract(Path("second.pdf"))
+
+    assert first.pages == 2
+    assert second.pages == 2
+    assert create_model_dict.call_count == 1
+    assert artifact_dicts == [{"models": "cached"}]
+    assert call_paths == ["first.pdf", "second.pdf"]
 
 
 # --- TOC stripping integration test ---
