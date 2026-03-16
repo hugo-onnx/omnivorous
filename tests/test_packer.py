@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from omnivorous.embeddings import LocalEmbeddingService
 from omnivorous.models import DocumentMetadata
 from omnivorous.agents import AGENT_TARGETS
 from omnivorous.packer import (
@@ -15,6 +16,19 @@ from omnivorous.packer import (
     pack_context,
     resolve_output_paths,
 )
+
+
+class _FakeEmbeddingBackend:
+    def embed(self, texts: list[str], *, model_name: str | None = None) -> list[list[float]]:
+        del model_name
+        vectors: list[list[float]] = []
+        for text in texts:
+            lowered = text.lower()
+            if "alpha" in lowered or "beta" in lowered:
+                vectors.append([1.0, 0.0])
+            else:
+                vectors.append([0.0, 1.0])
+        return vectors
 
 
 def _meta(
@@ -251,6 +265,39 @@ def test_pack_context_records_explicit_reference_evidence(tmp_path: Path):
     assert billing_edge["relationship_type"] in {"explicit_reference", "hybrid"}
     assert billing_edge["signal_scores"]["reference_match"] >= 0.95
     assert {"type": "path", "value": "billing.txt"} in billing_edge["evidence"]["references"]
+
+
+def test_pack_context_can_add_semantic_relationships(tmp_path: Path):
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "alpha.md").write_text("# Alpha Guide\n\nWidget recovery procedures.")
+    (source / "beta.txt").write_text("Subsystem restoration notes.")
+    (source / "hr.txt").write_text("Vacation handbook and onboarding.")
+
+    embedding_service = LocalEmbeddingService(
+        cache_dir=tmp_path / "embeddings-cache",
+        backend_name="fake",
+        backend=_FakeEmbeddingBackend(),
+    )
+
+    out = tmp_path / "agent-context"
+    pack_context(
+        source,
+        out,
+        chunk_size=20,
+        chunk_by="tokens",
+        enable_semantic=True,
+        embedding_service=embedding_service,
+    )
+
+    manifest = json.loads((out / "manifest.json").read_text())
+    assert manifest["relationship_strategy"] == "hybrid_reference_tfidf_embedding"
+    alpha = next(doc for doc in manifest["documents"] if doc["title"] == "Alpha Guide")
+    beta_edge = next(
+        edge for edge in alpha["related_documents"] if edge["target_title"] == "beta"
+    )
+    assert beta_edge["relationship_type"] in {"semantic_similarity", "hybrid"}
+    assert beta_edge["signal_scores"]["semantic_similarity"] >= 0.99
 
 
 # --- resolve_output_paths unit tests ---
