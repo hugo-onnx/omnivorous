@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from bs4 import BeautifulSoup, NavigableString, Tag
+from bs4 import BeautifulSoup, FeatureNotFound, NavigableString, Tag
 from markdownify import markdownify
 
 from omnivorous.converters.base import BaseConverter
@@ -23,29 +23,101 @@ _REMOVE_TAGS = {"script", "style", "nav", "header", "footer", "noscript"}
 _REMOVE_ROLES = {"navigation", "search", "banner", "contentinfo"}
 
 # class substrings that indicate non-content elements
-_REMOVE_CLASS_KEYWORDS = {"sidebar", "breadcrumb", "headerlink", "permalink"}
+_REMOVE_CLASS_KEYWORDS = {"sidebar", "breadcrumb", "breadcrumbs", "headerlink", "permalink"}
+_MIN_MEANINGFUL_SCOPE_CHARS = 200
 
 
 def _normalize_quotes(text: str) -> str:
     return text.replace("\u2018", "'").replace("\u2019", "'").replace("\u201c", '"').replace("\u201d", '"')
 
 
+def _make_soup(html: str) -> BeautifulSoup:
+    """Prefer the more robust lxml parser when available."""
+    try:
+        return BeautifulSoup(html, "lxml")
+    except FeatureNotFound:
+        return BeautifulSoup(html, "html.parser")
+
+
+def _class_matches_keyword(token: str, keyword: str) -> bool:
+    lowered = token.lower()
+    if lowered == keyword:
+        return True
+    separators = ("-", "_")
+    return any(
+        lowered.startswith(f"{keyword}{separator}")
+        or lowered.endswith(f"{separator}{keyword}")
+        or f"{separator}{keyword}{separator}" in lowered
+        for separator in separators
+    )
+
+
+def _is_non_content_class(classes: str) -> bool:
+    tokens = classes.lower().split()
+    for token in tokens:
+        if any(_class_matches_keyword(token, keyword) for keyword in _REMOVE_CLASS_KEYWORDS):
+            return True
+    return False
+
+
+def _text_length(tag: Tag | BeautifulSoup) -> int:
+    return len(tag.get_text(" ", strip=True))
+
+
+def _select_scope(soup: BeautifulSoup) -> Tag | BeautifulSoup:
+    """Prefer article-like content regions over the whole page shell."""
+    candidates = [
+        soup.find("article"),
+        soup.find("main"),
+        soup.find(attrs={"role": "main"}),
+        soup.body,
+        soup,
+    ]
+    ranked = [(candidate, _text_length(candidate)) for candidate in candidates if candidate is not None]
+    for candidate, length in ranked:
+        if length >= _MIN_MEANINGFUL_SCOPE_CHARS:
+            return candidate
+    return max(ranked, key=lambda item: item[1])[0] if ranked else soup
+
+
+def _fallback_shell_content(soup: BeautifulSoup, title: str) -> str:
+    """Return a minimal but informative fallback for JS-heavy or shell-like pages."""
+    description = ""
+    description_tag = soup.find("meta", attrs={"name": "description"})
+    if description_tag and description_tag.get("content"):
+        description = description_tag["content"].strip()
+
+    lines = [f"# {title}"]
+    if description:
+        lines.extend(["", description])
+    return "\n".join(lines).strip()
+
+
+def _looks_like_shell_content(content: str) -> bool:
+    """Return True when converted HTML still looks like a page shell."""
+    lowered = content.lower()
+    return "skip to main content" in lowered or "skip to search" in lowered
+
+
 def _clean_soup(soup: BeautifulSoup) -> BeautifulSoup:
     """Remove non-content elements from the soup before markdown conversion."""
     # Remove unwanted tags
-    for tag in soup.find_all(_REMOVE_TAGS):
+    for tag in list(soup.find_all(_REMOVE_TAGS)):
         tag.decompose()
 
     # Remove elements by role
-    for tag in soup.find_all(attrs={"role": _REMOVE_ROLES}):
+    for tag in list(soup.find_all(attrs={"role": _REMOVE_ROLES})):
+        if not isinstance(tag, Tag) or tag.attrs is None:
+            continue
         tag.decompose()
 
     # Remove elements whose class contains known non-content keywords
-    for tag in soup.find_all(class_=True):
-        if not isinstance(tag, Tag):
+    for tag in list(soup.find_all(class_=True)):
+        if not isinstance(tag, Tag) or tag.attrs is None:
             continue
-        classes = " ".join(tag.get("class", []))
-        if any(kw in classes.lower() for kw in _REMOVE_CLASS_KEYWORDS):
+        class_attr = tag.attrs.get("class") or []
+        classes = class_attr if isinstance(class_attr, str) else " ".join(class_attr)
+        if _is_non_content_class(classes):
             tag.decompose()
 
     return soup
@@ -58,7 +130,7 @@ class HtmlConverter(BaseConverter):
 
     def convert(self, path: Path) -> ConvertResult:
         html = path.read_text(encoding="utf-8", errors="replace")
-        soup = BeautifulSoup(html, "html.parser")
+        soup = _make_soup(html)
 
         title = ""
         title_tag = soup.find("title")
@@ -67,15 +139,12 @@ class HtmlConverter(BaseConverter):
 
         # Count tables in the content area before cleaning
         # Try to scope to main content first
-        main = soup.find("main") or soup.find(attrs={"role": "main"})
-        table_count = len((main or soup).find_all("table"))
+        table_count = len(_select_scope(soup).find_all("table"))
 
         # Clean non-content elements and convert
         _clean_soup(soup)
 
-        # If a <main> or role="main" element exists, convert only that
-        main = soup.find("main") or soup.find(attrs={"role": "main"})
-        scope = main or soup
+        scope = _select_scope(soup)
 
         # Replace <img> tags with markdown image placeholders
         image_count = 0
@@ -89,13 +158,15 @@ class HtmlConverter(BaseConverter):
             img.replace_with(NavigableString(f"\n\n{token}\n\n"))
             image_count += 1
 
-        convert_html = str(main) if main else str(soup)
+        convert_html = str(scope)
 
         content = markdownify(convert_html, heading_style="ATX")
         for token, placeholder in image_placeholders.items():
             content = content.replace(token, placeholder)
         # Clean up excessive whitespace
         content = re.sub(r"\n{3,}", "\n\n", content).strip()
+        if count_tokens(content) < 80 and _looks_like_shell_content(content):
+            content = _fallback_shell_content(soup, title or path.stem)
 
         headings = []
         for m in _HEADING_RE.finditer(content):
