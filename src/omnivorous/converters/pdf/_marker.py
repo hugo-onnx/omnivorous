@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import logging
 import re
+import threading
 from pathlib import Path
 
 from omnivorous.converters.pdf._engine import PdfExtractionResult
@@ -20,6 +21,11 @@ _TABLE_RE = re.compile(r"^\|.+\|\n\|[\s\-:|]+\|", re.MULTILINE)
 # Regex to extract markdown headings
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.+)$", re.MULTILINE)
 
+_MARKER_MODELS = None
+_MARKER_CONVERTER = None
+_MARKER_MODELS_LOCK = threading.Lock()
+_MARKER_CONVERTER_LOCK = threading.Lock()
+
 
 def _ensure_marker() -> None:
     """Check that marker-pdf is installed, raising a clear error if not."""
@@ -30,6 +36,14 @@ def _ensure_marker() -> None:
             "marker-pdf is required for scientific mode. "
             "Install it with: pip install omnivorous[scientific]"
         )
+
+
+def _load_marker_components():
+    """Load marker components lazily so tests can patch them without the dependency."""
+    from marker.converters.pdf import PdfConverter as MarkerPdfConverter
+    from marker.models import create_model_dict
+
+    return MarkerPdfConverter, create_model_dict
 
 
 @contextlib.contextmanager
@@ -50,6 +64,30 @@ def _suppress_tqdm():
         tqdm_module.tqdm.__init__ = orig_init
 
 
+def _get_marker_models():
+    """Build the marker model dictionary once per process."""
+    global _MARKER_MODELS
+    if _MARKER_MODELS is None:
+        with _MARKER_MODELS_LOCK:
+            if _MARKER_MODELS is None:
+                _, create_model_dict = _load_marker_components()
+                with _suppress_tqdm():
+                    _MARKER_MODELS = create_model_dict()
+    return _MARKER_MODELS
+
+
+def _get_marker_converter():
+    """Build the marker converter once per process."""
+    global _MARKER_CONVERTER
+    if _MARKER_CONVERTER is None:
+        with _MARKER_CONVERTER_LOCK:
+            if _MARKER_CONVERTER is None:
+                MarkerPdfConverter, _ = _load_marker_components()
+                with _suppress_tqdm():
+                    _MARKER_CONVERTER = MarkerPdfConverter(artifact_dict=_get_marker_models())
+    return _MARKER_CONVERTER
+
+
 class MarkerEngine:
     """PDF extraction using marker-pdf for LaTeX formula reconstruction."""
 
@@ -62,12 +100,8 @@ class MarkerEngine:
         for name in ("marker", "surya", "datalab", "texify"):
             logging.getLogger(name).setLevel(logging.WARNING)
 
-        from marker.converters.pdf import PdfConverter as MarkerPdfConverter
-        from marker.models import create_model_dict
-
         with _suppress_tqdm():
-            models = create_model_dict()
-            converter = MarkerPdfConverter(artifact_dict=models)
+            converter = _get_marker_converter()
             rendered = converter(str(path))
 
         content: str = rendered.markdown
