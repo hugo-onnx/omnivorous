@@ -60,7 +60,12 @@ def convert(
     file: Path = typer.Argument(..., help="Path to the document to convert."),
     output: Optional[Path] = typer.Option(None, "-o", "--output", help="Output file path."),
     encoding: str = typer.Option("o200k_base", "--encoding", help="Tiktoken encoding name."),
-    mode: str = typer.Option("fast", "--mode", "-m", help="PDF mode: fast (default) or scientific (LaTeX formulas)."),
+    mode: str = typer.Option(
+        "fast",
+        "--mode",
+        "-m",
+        help="PDF mode: fast (default) or scientific (LaTeX formulas).",
+    ),
 ) -> None:
     """Convert a single document to Markdown."""
     from omnivorous.frontmatter import add_frontmatter
@@ -102,46 +107,40 @@ def ingest(
     folder: Path = typer.Argument(..., help="Folder containing documents to convert."),
     output: Optional[Path] = typer.Option(None, "-o", "--output", help="Output directory."),
     encoding: str = typer.Option("o200k_base", "--encoding", help="Tiktoken encoding name."),
-    mode: str = typer.Option("fast", "--mode", "-m", help="PDF mode: fast (default) or scientific (LaTeX formulas)."),
+    mode: str = typer.Option(
+        "fast",
+        "--mode",
+        "-m",
+        help="PDF mode: fast (default) or scientific (LaTeX formulas).",
+    ),
 ) -> None:
     """Scan a folder and convert all supported documents to Markdown."""
-    from omnivorous.frontmatter import add_frontmatter
-    from omnivorous.registry import ensure_registry_loaded, get_converter, supported_extensions
+    from omnivorous.pipeline import discover_source_files, ingest_documents
 
     _apply_encoding(encoding)
     _apply_mode(mode)
-    ensure_registry_loaded()
 
     if not folder.is_dir():
         print_error(f"Not a directory: {folder}")
         raise typer.Exit(1)
 
     out_dir = unique_output_dir(output or Path("output"))
-    out_dir.mkdir(parents=True, exist_ok=True)
-    exts = set(supported_extensions())
-    files = sorted(f for f in folder.rglob("*") if f.is_file() and f.suffix.lower() in exts)
+    files = discover_source_files(folder)
 
     if not files:
         print_error(f"No supported files found in {folder}")
         raise typer.Exit(1)
 
-    from omnivorous.packer import resolve_output_paths
-
-    output_map = resolve_output_paths(files, folder)
-
     print_info(f"Found {len(files)} file(s)")
 
     with get_progress() as progress:
         task = progress.add_task("Converting...", total=len(files))
-        for f in files:
-            converter = get_converter(f.suffix.lower())
-            result = converter.convert(f)
-            md = add_frontmatter(result.content, result.metadata.to_dict())
-            out_rel = output_map[f]
-            out_path = out_dir / out_rel
-            out_path.parent.mkdir(parents=True, exist_ok=True)
-            out_path.write_text(md, encoding="utf-8")
-            progress.update(task, advance=1)
+        ingest_documents(
+            folder,
+            out_dir,
+            source_files=files,
+            on_document=lambda _source, _out, _result: progress.update(task, advance=1),
+        )
 
     print_success(f"Converted {len(files)} file(s) → {out_dir}/")
 
@@ -150,7 +149,12 @@ def ingest(
 def inspect(
     file: Path = typer.Argument(..., help="File to inspect."),
     encoding: str = typer.Option("o200k_base", "--encoding", help="Tiktoken encoding name."),
-    mode: str = typer.Option("fast", "--mode", "-m", help="PDF mode: fast (default) or scientific (LaTeX formulas)."),
+    mode: str = typer.Option(
+        "fast",
+        "--mode",
+        "-m",
+        help="PDF mode: fast (default) or scientific (LaTeX formulas).",
+    ),
 ) -> None:
     """Display metadata for a document."""
     from omnivorous.inspector import inspect_file
@@ -187,7 +191,6 @@ def inspect(
         headings_table.add_column("#", style="dim")
         headings_table.add_column("Heading")
         for i, h in enumerate(meta.headings, 1):
-            # Strip prefix for display, show indentation for hierarchy
             stripped = h.lstrip("#").strip()
             level = len(h) - len(h.lstrip("#"))
             indent = "  " * max(0, level - 1)
@@ -203,9 +206,17 @@ def pack(
     ),
     encoding: str = typer.Option("o200k_base", "--encoding", help="Tiktoken encoding name."),
     agent: Optional[list[str]] = typer.Option(
-        None, "--agent", "-a", help="Target agent(s): claude, codex, cursor, copilot, antigravity, or all."
+        None,
+        "--agent",
+        "-a",
+        help="Target agent(s): claude, codex, cursor, copilot, antigravity, or all.",
     ),
-    mode: str = typer.Option("fast", "--mode", "-m", help="PDF mode: fast (default) or scientific (LaTeX formulas)."),
+    mode: str = typer.Option(
+        "fast",
+        "--mode",
+        "-m",
+        help="PDF mode: fast (default) or scientific (LaTeX formulas).",
+    ),
 ) -> None:
     """Generate an agent context pack from a folder of documents."""
     from omnivorous.agents import resolve_agents
