@@ -16,6 +16,15 @@ from omnivorous.pipeline import (
     iter_converted_documents,
     resolve_output_paths as pipeline_resolve_output_paths,
 )
+from omnivorous.references import (
+    ReferenceMatch,
+    ReferenceTarget,
+    build_reference_index,
+    extract_identifiers,
+    extract_section_prefix,
+    extract_symbols,
+    resolve_references,
+)
 from omnivorous.relationships import RelationshipNode, build_relationships, extract_keywords
 from omnivorous.registry import ensure_registry_loaded
 from omnivorous.tokens import count_tokens
@@ -30,6 +39,16 @@ def _normalize_heading(heading: str) -> str:
 
 def _heading_samples(headings: list[str], limit: int = 4) -> list[str]:
     return [_normalize_heading(heading) for heading in headings[:limit]]
+
+
+def _dedupe_preserve_order(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for value in values:
+        if value and value not in seen:
+            seen.add(value)
+            deduped.append(value)
+    return deduped
 
 
 def _chunk_heading(chunk: str, fallback: str) -> str:
@@ -107,23 +126,152 @@ def _bridge_summaries(document_entries: list[dict[str, Any]], limit: int = 8) ->
     for document in document_entries:
         for chunk in document.get("chunks", []):
             for related in chunk.get("related_chunks", []):
-                pair = tuple(sorted((chunk["path"], related["path"])))
+                pair = tuple(sorted((chunk["path"], related["target_path"])))
                 if pair in seen_pairs:
                     continue
                 seen_pairs.add(pair)
                 bridges.append({
                     "left_path": chunk["path"],
                     "left_heading": chunk["heading"],
-                    "right_path": related["path"],
-                    "right_heading": related["heading"],
+                    "right_path": related["target_path"],
+                    "right_heading": related.get("target_heading"),
                     "score": related["score"],
-                    "shared_terms": related["shared_terms"],
+                    "relationship_type": related["relationship_type"],
+                    "shared_terms": related["evidence"].get("shared_terms", []),
+                    "references": related["evidence"].get("references", []),
                 })
 
     bridges.sort(
         key=lambda bridge: (-bridge["score"], bridge["left_path"], bridge["right_path"])
     )
     return bridges[:limit]
+
+
+def _path_aliases(*paths: str) -> tuple[str, ...]:
+    aliases: list[str] = []
+    for path in paths:
+        if not path:
+            continue
+        aliases.append(path)
+        aliases.append(Path(path).name)
+    return tuple(_dedupe_preserve_order(aliases))
+
+
+def _document_target_lookup(documents: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    return {
+        document["full_path"]: {
+            "path": document["full_path"],
+            "kind": "document",
+            "title": document["title"],
+            "heading": None,
+        }
+        for document in documents
+    }
+
+
+def _chunk_target_lookup(documents: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    return {
+        chunk["path"]: {
+            "path": chunk["path"],
+            "kind": "chunk",
+            "title": document["title"],
+            "heading": chunk["heading"],
+        }
+        for document in documents
+        for chunk in document["chunks"]
+    }
+
+
+def _fuse_relationship_sets(
+    source_keys: list[str],
+    lexical_relationships: dict[str, list[Any]],
+    explicit_relationships: dict[str, dict[str, list[ReferenceMatch]]],
+    target_lookup: dict[str, dict[str, Any]],
+    *,
+    limit: int = 3,
+) -> dict[str, list[dict[str, Any]]]:
+    fused: dict[str, list[dict[str, Any]]] = {}
+
+    for source_key in source_keys:
+        merged: dict[str, dict[str, Any]] = {}
+
+        for explicit in explicit_relationships.get(source_key, {}).values():
+            if not explicit:
+                continue
+            target_key = explicit[0].target_key
+            target = target_lookup[target_key]
+            edge = merged.setdefault(
+                target_key,
+                {
+                    "target_path": target["path"],
+                    "target_kind": target["kind"],
+                    "target_title": target["title"],
+                    "target_heading": target["heading"],
+                    "relationship_type": "explicit_reference",
+                    "score": 0.0,
+                    "signal_scores": {},
+                    "evidence": {
+                        "shared_terms": [],
+                        "references": [],
+                    },
+                },
+            )
+            best_reference = max(match.score for match in explicit)
+            edge["signal_scores"]["reference_match"] = max(
+                best_reference,
+                edge["signal_scores"].get("reference_match", 0.0),
+            )
+            for match in explicit:
+                ref = {"type": match.signal_type, "value": match.matched_text}
+                if ref not in edge["evidence"]["references"]:
+                    edge["evidence"]["references"].append(ref)
+
+        for lexical in lexical_relationships.get(source_key, []):
+            target = target_lookup[lexical.target_key]
+            edge = merged.setdefault(
+                lexical.target_key,
+                {
+                    "target_path": target["path"],
+                    "target_kind": target["kind"],
+                    "target_title": target["title"],
+                    "target_heading": target["heading"],
+                    "relationship_type": "lexical_similarity",
+                    "score": 0.0,
+                    "signal_scores": {},
+                    "evidence": {
+                        "shared_terms": [],
+                        "references": [],
+                    },
+                },
+            )
+            edge["signal_scores"]["lexical_similarity"] = lexical.score
+            edge["evidence"]["shared_terms"] = lexical.shared_terms
+
+        ranked: list[dict[str, Any]] = []
+        for edge in merged.values():
+            reference_score = edge["signal_scores"].get("reference_match", 0.0)
+            lexical_score = edge["signal_scores"].get("lexical_similarity", 0.0)
+            if reference_score and lexical_score:
+                edge["relationship_type"] = "hybrid"
+                edge["score"] = round(min(1.0, reference_score + lexical_score * 0.2), 3)
+            elif reference_score:
+                edge["relationship_type"] = "explicit_reference"
+                edge["score"] = round(reference_score, 3)
+            else:
+                edge["relationship_type"] = "lexical_similarity"
+                edge["score"] = round(lexical_score, 3)
+            ranked.append(edge)
+
+        ranked.sort(
+            key=lambda edge: (
+                -edge["score"],
+                edge["target_kind"],
+                edge["target_path"],
+            )
+        )
+        fused[source_key] = ranked[:limit]
+
+    return fused
 
 
 def generate_agent_instructions(
@@ -213,7 +361,7 @@ def generate_project_context(docs_metadata: list[DocumentMetadata] | list[dict[s
             lines.append(f"- Keywords: {', '.join(entry['keywords'])}")
         if entry.get("related_documents"):
             related = ", ".join(
-                f"{item['title']} ({', '.join(item['shared_terms'])})"
+                f"{item['target_title']} [{item['relationship_type']}]"
                 for item in entry["related_documents"]
             )
             lines.append(f"- Related: {related}")
@@ -225,10 +373,17 @@ def generate_project_context(docs_metadata: list[DocumentMetadata] | list[dict[s
             "",
         ])
         for bridge in bridges:
-            terms = ", ".join(bridge["shared_terms"])
+            evidence_parts: list[str] = []
+            if bridge["shared_terms"]:
+                evidence_parts.append(", ".join(bridge["shared_terms"]))
+            if bridge["references"]:
+                evidence_parts.append(
+                    ", ".join(ref["value"] for ref in bridge["references"])
+                )
+            evidence = "; ".join(evidence_parts) or "no extra evidence"
             lines.append(
                 f"- `{bridge['left_path']}` <-> `{bridge['right_path']}` "
-                f"(score {bridge['score']}) via {terms}"
+                f"[{bridge['relationship_type']}] (score {bridge['score']}) via {evidence}"
             )
         lines.append("")
 
@@ -246,11 +401,11 @@ def generate_manifest(
     """Generate a manifest.json for the agent context pack."""
     documents = _coerce_document_entries(docs_metadata, original_sources)
     manifest = {
-        "version": "2.0",
+        "version": "3.0",
         "generator": "omnivorous",
         "chunk_strategy": chunk_by,
         "chunk_size": chunk_size,
-        "relationship_strategy": "deterministic_tfidf",
+        "relationship_strategy": "hybrid_reference_tfidf",
         "documents": documents,
         "output_files": output_files,
         "total_tokens": sum(doc["tokens_estimate"] for doc in documents),
@@ -295,6 +450,10 @@ def pack_context(
     document_entries: list[dict[str, Any] | None] = [None] * len(source_files)
     document_nodes: list[RelationshipNode] = []
     chunk_nodes: list[RelationshipNode] = []
+    document_reference_targets: list[ReferenceTarget] = []
+    chunk_reference_targets: list[ReferenceTarget] = []
+    document_reference_texts: dict[str, str] = {}
+    chunk_reference_texts: dict[str, str] = {}
     output_files: list[str] = []
 
     for index, source_file, result in iter_converted_documents(source_files):
@@ -318,11 +477,28 @@ def pack_context(
         )
         chunk_count = len(chunk_result.chunks)
         chunk_entries: list[dict[str, Any]] = []
+        normalized_headings = [_normalize_heading(heading) for heading in result.metadata.headings]
+        document_identifiers = extract_identifiers(
+            "\n".join([result.metadata.title, *normalized_headings, result.content])
+        )
+        document_symbols = extract_symbols(
+            "\n".join([result.metadata.title, *normalized_headings]),
+            limit=16,
+        )
+        document_sections = _dedupe_preserve_order(
+            [
+                section
+                for heading in normalized_headings
+                if (section := extract_section_prefix(heading)) is not None
+            ]
+        )
+        document_reference_texts[full_doc_path] = result.content
 
         for chunk_index, chunk_content in enumerate(chunk_result.chunks, 1):
             chunk_path = _chunk_relative_path(out_rel, chunk_index)
             chunk_heading = _chunk_heading(chunk_content, result.metadata.title)
             chunk_tokens = count_tokens(chunk_content)
+            chunk_preview = _chunk_preview(chunk_content, chunk_heading)
             chunk_metadata = {
                 "source": full_doc_path,
                 "original_source": original_source,
@@ -347,7 +523,7 @@ def pack_context(
                 "index": chunk_index,
                 "tokens_estimate": chunk_tokens,
                 "heading": chunk_heading,
-                "preview": _chunk_preview(chunk_content, chunk_heading),
+                "preview": chunk_preview,
                 "previous": (
                     _chunk_relative_path(out_rel, chunk_index - 1)
                     if chunk_index > 1
@@ -368,10 +544,32 @@ def pack_context(
                     body="\n".join([
                         result.metadata.title,
                         chunk_heading,
-                        _chunk_preview(chunk_content, chunk_heading),
+                        chunk_preview,
                         chunk_content,
                     ]),
                     group=full_doc_path,
+                )
+            )
+            chunk_reference_texts[chunk_path] = chunk_content
+            chunk_sections = []
+            section_prefix = extract_section_prefix(chunk_heading)
+            if section_prefix is not None:
+                chunk_sections.append(section_prefix)
+            chunk_alias_inputs = [chunk_path]
+            if chunk_index == 1:
+                chunk_alias_inputs.extend([original_source, full_doc_path])
+            chunk_reference_targets.append(
+                ReferenceTarget(
+                    key=chunk_path,
+                    path=chunk_path,
+                    kind="chunk",
+                    label=chunk_heading,
+                    group=full_doc_path,
+                    path_aliases=_path_aliases(*chunk_alias_inputs),
+                    identifiers=tuple(extract_identifiers(f"{chunk_heading}\n{chunk_content}")),
+                    section_numbers=tuple(chunk_sections),
+                    headings=(chunk_heading,),
+                    symbols=tuple(extract_symbols(f"{chunk_heading}\n{chunk_content}", limit=12)),
                 )
             )
 
@@ -388,6 +586,20 @@ def pack_context(
             "heading_samples": _heading_samples(result.metadata.headings),
             "related_documents": [],
         }
+        document_reference_targets.append(
+            ReferenceTarget(
+                key=full_doc_path,
+                path=full_doc_path,
+                kind="document",
+                label=result.metadata.title,
+                group=full_doc_path,
+                path_aliases=_path_aliases(original_source, full_doc_path),
+                identifiers=tuple(document_identifiers),
+                section_numbers=tuple(document_sections),
+                headings=tuple([result.metadata.title, *normalized_headings]),
+                symbols=tuple(document_symbols),
+            )
+        )
         document_nodes.append(
             RelationshipNode(
                 key=full_doc_path,
@@ -401,17 +613,25 @@ def pack_context(
     documents = [entry for entry in document_entries if entry is not None]
     document_lookup = {entry["full_path"]: entry for entry in documents}
     document_relationships = build_relationships(document_nodes, limit=3, min_score=0.06)
-    for path, relationships in document_relationships.items():
-        entry = document_lookup[path]
-        entry["related_documents"] = [
-            {
-                "title": document_lookup[relationship.target_key]["title"],
-                "full_path": relationship.target_key,
-                "score": relationship.score,
-                "shared_terms": relationship.shared_terms,
-            }
-            for relationship in relationships
-        ]
+    document_reference_index = build_reference_index(document_reference_targets)
+    document_explicit_relationships = {
+        path: resolve_references(
+            document_reference_texts[path],
+            document_reference_index,
+            source_key=path,
+            source_group=path,
+            different_group_only=True,
+        )
+        for path in document_lookup
+    }
+    document_edges = _fuse_relationship_sets(
+        list(document_lookup),
+        document_relationships,
+        document_explicit_relationships,
+        _document_target_lookup(documents),
+    )
+    for path, edges in document_edges.items():
+        document_lookup[path]["related_documents"] = edges
 
     chunk_lookup = {
         chunk["path"]: (document, chunk)
@@ -424,19 +644,26 @@ def pack_context(
         min_score=0.05,
         require_different_group=True,
     )
-    for path, relationships in chunk_relationships.items():
+    chunk_reference_index = build_reference_index(chunk_reference_targets)
+    chunk_explicit_relationships = {
+        path: resolve_references(
+            chunk_reference_texts[path],
+            chunk_reference_index,
+            source_key=path,
+            source_group=chunk_lookup[path][0]["full_path"],
+            different_group_only=True,
+        )
+        for path in chunk_lookup
+    }
+    chunk_edges = _fuse_relationship_sets(
+        list(chunk_lookup),
+        chunk_relationships,
+        chunk_explicit_relationships,
+        _chunk_target_lookup(documents),
+    )
+    for path, edges in chunk_edges.items():
         _, chunk = chunk_lookup[path]
-        chunk["related_chunks"] = [
-            {
-                "path": chunk_lookup[relationship.target_key][1]["path"],
-                "heading": chunk_lookup[relationship.target_key][1]["heading"],
-                "document_title": chunk_lookup[relationship.target_key][0]["title"],
-                "document_path": chunk_lookup[relationship.target_key][0]["full_path"],
-                "score": relationship.score,
-                "shared_terms": relationship.shared_terms,
-            }
-            for relationship in relationships
-        ]
+        chunk["related_chunks"] = edges
 
     resolved = resolve_agents(agents or ["claude"])
     for agent in resolved:
