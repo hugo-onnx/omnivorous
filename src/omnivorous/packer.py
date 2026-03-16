@@ -9,6 +9,7 @@ from typing import Any
 
 from omnivorous.agents import AgentTarget, resolve_agents
 from omnivorous.chunker import chunk_markdown
+from omnivorous.embeddings import EmbeddingMatch, EmbeddingNode, LocalEmbeddingService
 from omnivorous.frontmatter import add_frontmatter
 from omnivorous.models import DocumentMetadata
 from omnivorous.pipeline import (
@@ -188,6 +189,7 @@ def _fuse_relationship_sets(
     explicit_relationships: dict[str, dict[str, list[ReferenceMatch]]],
     target_lookup: dict[str, dict[str, Any]],
     *,
+    semantic_relationships: dict[str, list[EmbeddingMatch]] | None = None,
     limit: int = 3,
 ) -> dict[str, list[dict[str, Any]]]:
     fused: dict[str, list[dict[str, Any]]] = {}
@@ -247,19 +249,56 @@ def _fuse_relationship_sets(
             edge["signal_scores"]["lexical_similarity"] = lexical.score
             edge["evidence"]["shared_terms"] = lexical.shared_terms
 
+        for semantic in (semantic_relationships or {}).get(source_key, []):
+            target = target_lookup[semantic.target_key]
+            edge = merged.setdefault(
+                semantic.target_key,
+                {
+                    "target_path": target["path"],
+                    "target_kind": target["kind"],
+                    "target_title": target["title"],
+                    "target_heading": target["heading"],
+                    "relationship_type": "semantic_similarity",
+                    "score": 0.0,
+                    "signal_scores": {},
+                    "evidence": {
+                        "shared_terms": [],
+                        "references": [],
+                    },
+                },
+            )
+            edge["signal_scores"]["semantic_similarity"] = semantic.score
+
         ranked: list[dict[str, Any]] = []
         for edge in merged.values():
             reference_score = edge["signal_scores"].get("reference_match", 0.0)
             lexical_score = edge["signal_scores"].get("lexical_similarity", 0.0)
-            if reference_score and lexical_score:
+            semantic_score = edge["signal_scores"].get("semantic_similarity", 0.0)
+            signal_count = sum(
+                score > 0.0 for score in (reference_score, lexical_score, semantic_score)
+            )
+
+            if reference_score:
+                edge["relationship_type"] = "hybrid" if signal_count > 1 else "explicit_reference"
+                edge["score"] = round(
+                    min(1.0, reference_score + lexical_score * 0.15 + semantic_score * 0.2),
+                    3,
+                )
+            elif lexical_score and semantic_score:
                 edge["relationship_type"] = "hybrid"
-                edge["score"] = round(min(1.0, reference_score + lexical_score * 0.2), 3)
-            elif reference_score:
-                edge["relationship_type"] = "explicit_reference"
-                edge["score"] = round(reference_score, 3)
-            else:
+                edge["score"] = round(
+                    min(1.0, max(lexical_score, semantic_score) + min(lexical_score, semantic_score) * 0.15),
+                    3,
+                )
+            elif lexical_score:
                 edge["relationship_type"] = "lexical_similarity"
                 edge["score"] = round(lexical_score, 3)
+            elif semantic_score:
+                edge["relationship_type"] = "semantic_similarity"
+                edge["score"] = round(semantic_score, 3)
+            else:
+                edge["relationship_type"] = "explicit_reference"
+                edge["score"] = 0.0
             ranked.append(edge)
 
         ranked.sort(
@@ -397,6 +436,7 @@ def generate_manifest(
     *,
     chunk_by: str = "heading",
     chunk_size: int = 500,
+    relationship_strategy: str = "hybrid_reference_tfidf",
 ) -> str:
     """Generate a manifest.json for the agent context pack."""
     documents = _coerce_document_entries(docs_metadata, original_sources)
@@ -405,7 +445,7 @@ def generate_manifest(
         "generator": "omnivorous",
         "chunk_strategy": chunk_by,
         "chunk_size": chunk_size,
-        "relationship_strategy": "hybrid_reference_tfidf",
+        "relationship_strategy": relationship_strategy,
         "documents": documents,
         "output_files": output_files,
         "total_tokens": sum(doc["tokens_estimate"] for doc in documents),
@@ -432,6 +472,11 @@ def pack_context(
     *,
     chunk_size: int = 500,
     chunk_by: str = "heading",
+    enable_semantic: bool = False,
+    embedding_backend: str = "fastembed",
+    embedding_model: str | None = None,
+    embedding_cache_dir: Path | None = None,
+    embedding_service: LocalEmbeddingService | None = None,
 ) -> Path:
     """Orchestrate full pipeline: convert all docs and generate agent context pack."""
     ensure_registry_loaded()
@@ -450,6 +495,8 @@ def pack_context(
     document_entries: list[dict[str, Any] | None] = [None] * len(source_files)
     document_nodes: list[RelationshipNode] = []
     chunk_nodes: list[RelationshipNode] = []
+    document_embedding_nodes: list[EmbeddingNode] = []
+    chunk_embedding_nodes: list[EmbeddingNode] = []
     document_reference_targets: list[ReferenceTarget] = []
     chunk_reference_targets: list[ReferenceTarget] = []
     document_reference_texts: dict[str, str] = {}
@@ -609,6 +656,25 @@ def pack_context(
                 group=full_doc_path,
             )
         )
+        document_embedding_nodes.append(
+            EmbeddingNode(
+                key=full_doc_path,
+                text=_document_relationship_text(document_entries[index]),
+                group=full_doc_path,
+            )
+        )
+        for chunk in chunk_entries:
+            chunk_embedding_nodes.append(
+                EmbeddingNode(
+                    key=chunk["path"],
+                    text="\n".join([
+                        result.metadata.title,
+                        chunk["heading"],
+                        chunk["preview"],
+                    ]),
+                    group=full_doc_path,
+                )
+            )
 
     documents = [entry for entry in document_entries if entry is not None]
     document_lookup = {entry["full_path"]: entry for entry in documents}
@@ -624,11 +690,33 @@ def pack_context(
         )
         for path in document_lookup
     }
+    document_semantic_relationships: dict[str, list[EmbeddingMatch]] = {}
+    chunk_semantic_relationships: dict[str, list[EmbeddingMatch]] = {}
+    relationship_strategy = "hybrid_reference_tfidf"
+    if enable_semantic:
+        semantic_service = embedding_service or LocalEmbeddingService(
+            cache_dir=embedding_cache_dir or output_dir / ".omnivorous-cache",
+            backend_name=embedding_backend,
+            model_name=embedding_model,
+        )
+        document_semantic_relationships = semantic_service.build_relationships(
+            document_embedding_nodes,
+            limit=3,
+            min_score=0.35,
+        )
+        chunk_semantic_relationships = semantic_service.build_relationships(
+            chunk_embedding_nodes,
+            limit=3,
+            min_score=0.35,
+            require_different_group=True,
+        )
+        relationship_strategy = "hybrid_reference_tfidf_embedding"
     document_edges = _fuse_relationship_sets(
         list(document_lookup),
         document_relationships,
         document_explicit_relationships,
         _document_target_lookup(documents),
+        semantic_relationships=document_semantic_relationships,
     )
     for path, edges in document_edges.items():
         document_lookup[path]["related_documents"] = edges
@@ -660,6 +748,7 @@ def pack_context(
         chunk_relationships,
         chunk_explicit_relationships,
         _chunk_target_lookup(documents),
+        semantic_relationships=chunk_semantic_relationships,
     )
     for path, edges in chunk_edges.items():
         _, chunk = chunk_lookup[path]
@@ -684,6 +773,7 @@ def pack_context(
         output_files,
         chunk_by=chunk_by,
         chunk_size=chunk_size,
+        relationship_strategy=relationship_strategy,
     )
     (output_dir / "manifest.json").write_text(manifest, encoding="utf-8")
 
