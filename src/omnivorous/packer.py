@@ -9,7 +9,12 @@ from typing import Any
 
 from omnivorous.agents import AgentTarget, resolve_agents
 from omnivorous.chunker import chunk_markdown
-from omnivorous.embeddings import EmbeddingMatch, EmbeddingNode, LocalEmbeddingService
+from omnivorous.embeddings import (
+    EmbeddingMatch,
+    EmbeddingNode,
+    LocalEmbeddingService,
+    default_embedding_cache_dir,
+)
 from omnivorous.frontmatter import add_frontmatter
 from omnivorous.models import DocumentMetadata
 from omnivorous.pipeline import (
@@ -32,6 +37,19 @@ from omnivorous.tokens import count_tokens
 
 _ATX_HEADING_RE = re.compile(r"^#{1,6}\s+(.+)$", re.MULTILINE)
 _SETEXT_HEADING_RE = re.compile(r"^(.+)\n([=-]{2,})\s*$", re.MULTILINE)
+_LOW_SIGNAL_RELATIONSHIP_TERMS = {
+    "archive",
+    "copyright",
+    "donate",
+    "donations",
+    "ebook",
+    "ebooks",
+    "foundation",
+    "gutenberg",
+    "license",
+    "project",
+    "trademark",
+}
 
 
 def _normalize_heading(heading: str) -> str:
@@ -77,6 +95,19 @@ def _chunk_preview(chunk: str, fallback: str) -> str:
             continue
         return stripped[:160]
     return fallback[:160]
+
+
+def _is_low_signal_relationship_chunk(text: str) -> bool:
+    lowered = text.lower()
+    if "project gutenberg" in lowered:
+        return True
+
+    matched_terms = {
+        term
+        for term in _LOW_SIGNAL_RELATIONSHIP_TERMS
+        if re.search(rf"\b{re.escape(term)}\b", lowered)
+    }
+    return len(matched_terms) >= 4
 
 
 def _coerce_document_entries(
@@ -143,7 +174,14 @@ def _bridge_summaries(document_entries: list[dict[str, Any]], limit: int = 8) ->
                 })
 
     bridges.sort(
-        key=lambda bridge: (-bridge["score"], bridge["left_path"], bridge["right_path"])
+        key=lambda bridge: (
+            -int(bool(bridge["references"])),
+            -int(bool(bridge["shared_terms"])),
+            bridge["relationship_type"] == "semantic_similarity",
+            -bridge["score"],
+            bridge["left_path"],
+            bridge["right_path"],
+        )
     )
     return bridges[:limit]
 
@@ -181,6 +219,21 @@ def _chunk_target_lookup(documents: list[dict[str, Any]]) -> dict[str, dict[str,
         for document in documents
         for chunk in document["chunks"]
     }
+
+
+def _semantic_candidate_groups(
+    document_edges: dict[str, list[dict[str, Any]]],
+) -> dict[str, set[str]]:
+    groups: dict[str, set[str]] = {}
+    for source_path, edges in document_edges.items():
+        allowed = groups.setdefault(source_path, set())
+        for edge in edges:
+            if edge["target_kind"] != "document":
+                continue
+            target_path = edge["target_path"]
+            allowed.add(target_path)
+            groups.setdefault(target_path, set()).add(source_path)
+    return {path: targets for path, targets in groups.items() if targets}
 
 
 def _fuse_relationship_sets(
@@ -546,6 +599,7 @@ def pack_context(
             chunk_heading = _chunk_heading(chunk_content, result.metadata.title)
             chunk_tokens = count_tokens(chunk_content)
             chunk_preview = _chunk_preview(chunk_content, chunk_heading)
+            low_signal_relationship_chunk = _is_low_signal_relationship_chunk(chunk_content)
             chunk_metadata = {
                 "source": full_doc_path,
                 "original_source": original_source,
@@ -583,42 +637,54 @@ def pack_context(
                 ),
                 "related_chunks": [],
             })
-            chunk_nodes.append(
-                RelationshipNode(
-                    key=chunk_path,
-                    label=chunk_heading,
-                    path=chunk_path,
-                    body="\n".join([
-                        result.metadata.title,
-                        chunk_heading,
-                        chunk_preview,
-                        chunk_content,
-                    ]),
-                    group=full_doc_path,
+            if not low_signal_relationship_chunk:
+                chunk_nodes.append(
+                    RelationshipNode(
+                        key=chunk_path,
+                        label=chunk_heading,
+                        path=chunk_path,
+                        body="\n".join([
+                            result.metadata.title,
+                            chunk_heading,
+                            chunk_preview,
+                            chunk_content,
+                        ]),
+                        group=full_doc_path,
+                    )
                 )
-            )
-            chunk_reference_texts[chunk_path] = chunk_content
-            chunk_sections = []
-            section_prefix = extract_section_prefix(chunk_heading)
-            if section_prefix is not None:
-                chunk_sections.append(section_prefix)
-            chunk_alias_inputs = [chunk_path]
-            if chunk_index == 1:
-                chunk_alias_inputs.extend([original_source, full_doc_path])
-            chunk_reference_targets.append(
-                ReferenceTarget(
-                    key=chunk_path,
-                    path=chunk_path,
-                    kind="chunk",
-                    label=chunk_heading,
-                    group=full_doc_path,
-                    path_aliases=_path_aliases(*chunk_alias_inputs),
-                    identifiers=tuple(extract_identifiers(f"{chunk_heading}\n{chunk_content}")),
-                    section_numbers=tuple(chunk_sections),
-                    headings=(chunk_heading,),
-                    symbols=tuple(extract_symbols(f"{chunk_heading}\n{chunk_content}", limit=12)),
+                chunk_reference_texts[chunk_path] = chunk_content
+                chunk_sections = []
+                section_prefix = extract_section_prefix(chunk_heading)
+                if section_prefix is not None:
+                    chunk_sections.append(section_prefix)
+                chunk_alias_inputs = [chunk_path]
+                if chunk_index == 1:
+                    chunk_alias_inputs.extend([original_source, full_doc_path])
+                chunk_reference_targets.append(
+                    ReferenceTarget(
+                        key=chunk_path,
+                        path=chunk_path,
+                        kind="chunk",
+                        label=chunk_heading,
+                        group=full_doc_path,
+                        path_aliases=_path_aliases(*chunk_alias_inputs),
+                        identifiers=tuple(extract_identifiers(f"{chunk_heading}\n{chunk_content}")),
+                        section_numbers=tuple(chunk_sections),
+                        headings=(chunk_heading,),
+                        symbols=tuple(extract_symbols(f"{chunk_heading}\n{chunk_content}", limit=12)),
+                    )
                 )
-            )
+                chunk_embedding_nodes.append(
+                    EmbeddingNode(
+                        key=chunk_path,
+                        text="\n".join([
+                            result.metadata.title,
+                            chunk_heading,
+                            chunk_preview,
+                        ]),
+                        group=full_doc_path,
+                    )
+                )
 
         document_entries[index] = {
             **result.metadata.to_dict(),
@@ -663,19 +729,6 @@ def pack_context(
                 group=full_doc_path,
             )
         )
-        for chunk in chunk_entries:
-            chunk_embedding_nodes.append(
-                EmbeddingNode(
-                    key=chunk["path"],
-                    text="\n".join([
-                        result.metadata.title,
-                        chunk["heading"],
-                        chunk["preview"],
-                    ]),
-                    group=full_doc_path,
-                )
-            )
-
     documents = [entry for entry in document_entries if entry is not None]
     document_lookup = {entry["full_path"]: entry for entry in documents}
     document_relationships = build_relationships(document_nodes, limit=3, min_score=0.06)
@@ -695,7 +748,7 @@ def pack_context(
     relationship_strategy = "hybrid_reference_tfidf"
     if enable_semantic:
         semantic_service = embedding_service or LocalEmbeddingService(
-            cache_dir=embedding_cache_dir or output_dir / ".omnivorous-cache",
+            cache_dir=embedding_cache_dir or default_embedding_cache_dir(),
             backend_name=embedding_backend,
             model_name=embedding_model,
         )
@@ -703,12 +756,6 @@ def pack_context(
             document_embedding_nodes,
             limit=3,
             min_score=0.35,
-        )
-        chunk_semantic_relationships = semantic_service.build_relationships(
-            chunk_embedding_nodes,
-            limit=3,
-            min_score=0.35,
-            require_different_group=True,
         )
         relationship_strategy = "hybrid_reference_tfidf_embedding"
     document_edges = _fuse_relationship_sets(
@@ -734,15 +781,28 @@ def pack_context(
     )
     chunk_reference_index = build_reference_index(chunk_reference_targets)
     chunk_explicit_relationships = {
-        path: resolve_references(
-            chunk_reference_texts[path],
-            chunk_reference_index,
-            source_key=path,
-            source_group=chunk_lookup[path][0]["full_path"],
-            different_group_only=True,
+        path: (
+            resolve_references(
+                chunk_reference_texts[path],
+                chunk_reference_index,
+                source_key=path,
+                source_group=chunk_lookup[path][0]["full_path"],
+                different_group_only=True,
+            )
+            if path in chunk_reference_texts
+            else {}
         )
         for path in chunk_lookup
     }
+    semantic_candidate_groups = _semantic_candidate_groups(document_edges)
+    if enable_semantic and semantic_candidate_groups:
+        chunk_semantic_relationships = semantic_service.build_relationships(
+            chunk_embedding_nodes,
+            limit=3,
+            min_score=0.35,
+            require_different_group=True,
+            candidate_groups=semantic_candidate_groups,
+        )
     chunk_edges = _fuse_relationship_sets(
         list(chunk_lookup),
         chunk_relationships,
