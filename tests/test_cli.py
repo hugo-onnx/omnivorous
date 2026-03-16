@@ -91,6 +91,8 @@ def test_pack(fixtures_dir: Path, tmp_path: Path):
     assert (out / "CLAUDE.md").exists()
     assert (out / "PROJECT_CONTEXT.md").exists()
     assert (out / "manifest.json").exists()
+    assert (out / "docs" / "chunks").is_dir()
+    assert (out / "docs" / "full").is_dir()
 
 
 def test_pack_with_agent_flag(fixtures_dir: Path, tmp_path: Path):
@@ -158,6 +160,7 @@ def test_pack_auto_increments_existing_output(fixtures_dir: Path, tmp_path: Path
     incremented = tmp_path / "agent-context-1"
     assert incremented.is_dir()
     assert (incremented / "CLAUDE.md").exists()
+    assert (incremented / "docs" / "chunks").is_dir()
 
 
 def test_ingest_disambiguates_same_stem(tmp_path: Path):
@@ -192,4 +195,34 @@ def test_convert_with_scientific_mode_no_marker(fixtures_dir: Path):
         result = runner.invoke(
             app, ["convert", str(fixtures_dir / "notes.txt"), "--mode", "scientific"]
         )
+    assert result.exit_code == 1
+
+
+def test_pack_with_chunk_options(fixtures_dir: Path, tmp_path: Path):
+    out = tmp_path / "agent-ctx"
+    result = runner.invoke(
+        app,
+        [
+            "pack",
+            str(fixtures_dir),
+            "-o",
+            str(out),
+            "--chunk-size",
+            "40",
+            "--chunk-by",
+            "tokens",
+        ],
+    )
+    assert result.exit_code == 0
+    manifest = (out / "manifest.json").read_text()
+    assert '"chunk_strategy": "tokens"' in manifest
+    assert '"chunk_size": 40' in manifest
+
+
+def test_pack_with_invalid_chunk_strategy(fixtures_dir: Path, tmp_path: Path):
+    out = tmp_path / "agent-ctx"
+    result = runner.invoke(
+        app,
+        ["pack", str(fixtures_dir), "-o", str(out), "--chunk-by", "invalid"],
+    )
     assert result.exit_code == 1
