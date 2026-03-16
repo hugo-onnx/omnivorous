@@ -57,3 +57,39 @@ def test_html_image_placeholder_no_alt(tmp_path: Path):
     result = HtmlConverter().convert(f)
     assert "![image]()" in result.content
     assert result.metadata.images == 1
+
+
+def test_html_cleaner_handles_decomposed_children_with_classes(tmp_path: Path):
+    html = (
+        "<html><body>"
+        "<nav class='breadcrumb'><a class='headerlink' href='#'>skip</a></nav>"
+        "<main><h1>HTTP Caching</h1><p>Cache-Control directives.</p></main>"
+        "</body></html>"
+    )
+    f = tmp_path / "nested_classes.html"
+    f.write_text(html, encoding="utf-8")
+
+    result = HtmlConverter().convert(f)
+
+    assert "# HTTP Caching" in result.content
+    assert "Cache\\-Control directives." in result.content
+
+
+def test_html_cleaner_keeps_main_layout_container_with_sidebars_in_class(tmp_path: Path):
+    html = (
+        "<html><body>"
+        "<div class='page-layout__main'>"
+        "<div class='layout__2-sidebars-inline reference-layout'>"
+        "<main><h1>HTTP caching</h1><p>The HTTP cache stores a response.</p></main>"
+        "</div>"
+        "<aside class='left-sidebar'>Navigation</aside>"
+        "</div>"
+        "</body></html>"
+    )
+    f = tmp_path / "main_layout.html"
+    f.write_text(html, encoding="utf-8")
+
+    result = HtmlConverter().convert(f)
+
+    assert "# HTTP caching" in result.content
+    assert "The HTTP cache stores a response." in result.content
