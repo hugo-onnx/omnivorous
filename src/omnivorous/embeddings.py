@@ -5,6 +5,8 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -78,17 +80,31 @@ class LocalEmbeddingService:
         limit: int = 3,
         min_score: float = 0.45,
         require_different_group: bool = False,
+        candidate_groups: dict[str, set[str]] | None = None,
     ) -> dict[str, list[EmbeddingMatch]]:
         if not nodes:
             return {}
 
         vectors = self._embed_nodes(nodes)
+        group_members: dict[str | None, list[int]] = {}
+        if candidate_groups is not None:
+            for index, node in enumerate(nodes):
+                group_members.setdefault(node.group, []).append(index)
         relationships: dict[str, list[EmbeddingMatch]] = {}
         for index, node in enumerate(nodes):
             ranked: list[EmbeddingMatch] = []
-            for other_index, other in enumerate(nodes):
+            if candidate_groups is None:
+                candidate_indexes = range(len(nodes))
+            else:
+                candidate_indexes_set: set[int] = set()
+                for group in candidate_groups.get(node.group or "", set()):
+                    candidate_indexes_set.update(group_members.get(group, []))
+                candidate_indexes = sorted(candidate_indexes_set)
+
+            for other_index in candidate_indexes:
                 if index == other_index:
                     continue
+                other = nodes[other_index]
                 if require_different_group and node.group == other.group:
                     continue
 
@@ -150,3 +166,12 @@ def _cosine_similarity(left: list[float], right: list[float]) -> float:
 
     dot_product = sum(left_value * right_value for left_value, right_value in zip(left, right))
     return dot_product / (left_norm * right_norm)
+
+
+def default_embedding_cache_dir() -> Path:
+    """Return a user-level cache directory for local embeddings."""
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Caches" / "omnivorous"
+
+    cache_home = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
+    return cache_home / "omnivorous"
