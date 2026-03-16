@@ -267,6 +267,50 @@ def test_pack_context_records_explicit_reference_evidence(tmp_path: Path):
     assert {"type": "path", "value": "billing.txt"} in billing_edge["evidence"]["references"]
 
 
+def test_pack_context_ignores_low_confidence_reference_noise(tmp_path: Path):
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "story.txt").write_text(
+        "CHAPTER IV\n\n"
+        "See section 4, THE, and III before you continue.\n"
+    )
+    (source / "api.md").write_text("# API Guide\n\n## 4 Billing\n\n`PaymentClient` handles retries.\n")
+
+    out = tmp_path / "agent-context"
+    pack_context(source, out, chunk_size=20, chunk_by="tokens")
+
+    manifest = json.loads((out / "manifest.json").read_text())
+    story = next(doc for doc in manifest["documents"] if doc["title"] == "story")
+    assert story["related_documents"] == []
+
+
+def test_pack_context_excludes_low_signal_boilerplate_chunks_from_relationships(tmp_path: Path):
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "story-one.md").write_text(
+        "# Story One\n\n"
+        "## Plot\n\n"
+        "Tea party, rabbit hole, and curious adventures.\n\n"
+        "## License\n\n"
+        "Project Gutenberg ebook license copyright foundation donations trademark archive.\n"
+    )
+    (source / "story-two.md").write_text(
+        "# Story Two\n\n"
+        "## Plot\n\n"
+        "Battle plans, scouts, and strategic retreats.\n\n"
+        "## License\n\n"
+        "Project Gutenberg ebook license copyright foundation donations trademark archive.\n"
+    )
+
+    out = tmp_path / "agent-context"
+    pack_context(source, out, chunk_size=20, chunk_by="heading")
+
+    manifest = json.loads((out / "manifest.json").read_text())
+    story_one = next(doc for doc in manifest["documents"] if doc["title"] == "Story One")
+    license_chunk = next(chunk for chunk in story_one["chunks"] if chunk["heading"] == "License")
+    assert license_chunk["related_chunks"] == []
+
+
 def test_pack_context_can_add_semantic_relationships(tmp_path: Path):
     source = tmp_path / "source"
     source.mkdir()
@@ -298,6 +342,43 @@ def test_pack_context_can_add_semantic_relationships(tmp_path: Path):
     )
     assert beta_edge["relationship_type"] in {"semantic_similarity", "hybrid"}
     assert beta_edge["signal_scores"]["semantic_similarity"] >= 0.99
+    assert not (out / ".omnivorous-cache").exists()
+
+
+def test_pack_context_uses_external_default_embedding_cache(
+    tmp_path: Path, monkeypatch
+):
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "alpha.md").write_text("# Alpha\n\nWidget recovery procedures.")
+    (source / "beta.md").write_text("# Beta\n\nSubsystem restoration notes.")
+
+    recorded: dict[str, Path] = {}
+
+    class RecordingEmbeddingService:
+        def __init__(
+            self,
+            *,
+            cache_dir: Path,
+            backend_name: str = "fastembed",
+            model_name: str | None = None,
+            backend=None,
+        ):
+            del backend_name, model_name, backend
+            recorded["cache_dir"] = cache_dir
+
+        def build_relationships(self, nodes, **kwargs):
+            del nodes, kwargs
+            return {}
+
+    monkeypatch.setattr("omnivorous.packer.LocalEmbeddingService", RecordingEmbeddingService)
+
+    out = tmp_path / "agent-context"
+    pack_context(source, out, chunk_size=20, chunk_by="tokens", enable_semantic=True)
+
+    assert recorded["cache_dir"] != out / ".omnivorous-cache"
+    assert out not in recorded["cache_dir"].parents
+    assert not (out / ".omnivorous-cache").exists()
 
 
 # --- resolve_output_paths unit tests ---
