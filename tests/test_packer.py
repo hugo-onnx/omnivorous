@@ -47,9 +47,9 @@ def test_generate_project_context():
 def test_generate_manifest():
     result = generate_manifest([_meta()], ["docs/test.md"])
     data = json.loads(result)
-    assert data["version"] == "2.0"
+    assert data["version"] == "3.0"
     assert data["generator"] == "omnivorous"
-    assert data["relationship_strategy"] == "deterministic_tfidf"
+    assert data["relationship_strategy"] == "hybrid_reference_tfidf"
     assert len(data["documents"]) == 1
     assert data["chunk_strategy"] == "heading"
     assert data["chunk_size"] == 500
@@ -219,17 +219,38 @@ def test_pack_context_builds_cross_document_relationships(tmp_path: Path):
 
     manifest = json.loads((out / "manifest.json").read_text())
     payments = next(doc for doc in manifest["documents"] if doc["title"] == "Payments API")
-    related_titles = [item["title"] for item in payments["related_documents"]]
+    related_titles = [item["target_title"] for item in payments["related_documents"]]
     assert "billing" in related_titles
     assert "hr" not in related_titles
 
     related_chunk = payments["chunks"][0]["related_chunks"][0]
-    assert related_chunk["document_title"] == "billing"
-    assert related_chunk["path"].startswith("docs/chunks/")
-    assert related_chunk["shared_terms"]
+    assert related_chunk["target_title"] == "billing"
+    assert related_chunk["target_path"].startswith("docs/chunks/")
+    assert related_chunk["evidence"]["shared_terms"]
 
     project_context = (out / "PROJECT_CONTEXT.md").read_text()
     assert "Cross-Document Bridges" in project_context
+
+
+def test_pack_context_records_explicit_reference_evidence(tmp_path: Path):
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "overview.md").write_text(
+        "# Overview\n\nSee `billing.txt` and RFC-101 for refund handling.\n"
+    )
+    (source / "billing.txt").write_text("RFC-101 billing runbook for refund handling.")
+
+    out = tmp_path / "agent-context"
+    pack_context(source, out, chunk_size=20, chunk_by="tokens")
+
+    manifest = json.loads((out / "manifest.json").read_text())
+    overview = next(doc for doc in manifest["documents"] if doc["title"] == "Overview")
+    billing_edge = next(
+        edge for edge in overview["related_documents"] if edge["target_title"] == "billing"
+    )
+    assert billing_edge["relationship_type"] in {"explicit_reference", "hybrid"}
+    assert billing_edge["signal_scores"]["reference_match"] >= 0.95
+    assert {"type": "path", "value": "billing.txt"} in billing_edge["evidence"]["references"]
 
 
 # --- resolve_output_paths unit tests ---
