@@ -78,6 +78,31 @@ def test_local_embedding_service_respects_groups(tmp_path: Path):
     assert relationships["a1"][0].target_key == "b1"
 
 
+def test_local_embedding_service_respects_candidate_groups(tmp_path: Path):
+    backend = FakeBackend()
+    service = LocalEmbeddingService(
+        cache_dir=tmp_path,
+        backend_name="fake",
+        backend=backend,
+    )
+    nodes = [
+        EmbeddingNode(key="a1", text="Alpha one", group="a"),
+        EmbeddingNode(key="b1", text="Beta one", group="b"),
+        EmbeddingNode(key="c1", text="Beta two", group="c"),
+    ]
+
+    relationships = service.build_relationships(
+        nodes,
+        min_score=0.1,
+        require_different_group=True,
+        candidate_groups={"a": {"b"}, "b": {"a"}},
+    )
+
+    assert relationships["a1"][0].target_key == "b1"
+    assert relationships["c1"] == []
+    assert all(match.target_key != "c1" for match in relationships["a1"])
+
+
 def test_local_embedding_service_normalizes_json_unsafe_scalars(tmp_path: Path):
     service = LocalEmbeddingService(
         cache_dir=tmp_path,
