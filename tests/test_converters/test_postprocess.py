@@ -107,3 +107,35 @@ def test_strip_toc_does_not_match_partial():
     )
     result = strip_toc(text)
     assert result == text
+
+
+def test_strip_toc_handles_plain_text_numbered_sections_after_code_fenced_toc():
+    text = (
+        "# RFC 2616\n\n"
+        "Abstract text before the table of contents.\n\n"
+        "```\n"
+        "RFC 2616            HTTP/1.1            June 1999\n\n"
+        "Table of Contents\n\n"
+        "1  Introduction ...................................................7\n"
+        "1.1  Purpose......................................................7\n"
+        "1.2  Requirements .................................................8\n\n"
+        "Fielding, et al.      Standards Track           [Page 2]\n"
+        "```\n\n"
+        "```\n"
+        "RFC 2616            HTTP/1.1            June 1999\n\n"
+        "2  Notational Conventions .......................................14\n"
+        "3  Protocol Parameters ..........................................17\n"
+        "21  Full Copyright Statement ...................................176\n\n"
+        "1 Introduction\n\n"
+        "1.1 Purpose\n\n"
+        "The Hypertext Transfer Protocol is an application-level protocol for\n"
+        "distributed, collaborative, hypermedia information systems.\n"
+    )
+
+    result = strip_toc(text)
+
+    assert "Table of Contents" not in result
+    assert "1.2  Requirements .................................................8" not in result
+    assert "1 Introduction" in result
+    assert "The Hypertext Transfer Protocol is an application-level protocol" in result
+    assert "Abstract text before the table of contents." in result
