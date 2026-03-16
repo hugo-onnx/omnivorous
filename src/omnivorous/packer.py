@@ -7,8 +7,13 @@ from pathlib import Path
 
 from omnivorous.agents import AgentTarget, resolve_agents
 from omnivorous.frontmatter import add_frontmatter
-from omnivorous.models import ConvertResult, DocumentMetadata
-from omnivorous.registry import ensure_registry_loaded, get_converter, supported_extensions
+from omnivorous.models import DocumentMetadata
+from omnivorous.pipeline import (
+    discover_source_files,
+    iter_converted_documents,
+    resolve_output_paths as pipeline_resolve_output_paths,
+)
+from omnivorous.registry import ensure_registry_loaded
 
 
 def generate_agent_instructions(
@@ -98,36 +103,8 @@ def generate_manifest(
 def resolve_output_paths(
     source_files: list[Path], source_dir: Path
 ) -> dict[Path, Path]:
-    """Map each source file to a unique relative output path under the output directory.
-
-    Preserves directory structure from source_dir. If multiple files in the same
-    directory share the same stem, disambiguates by appending the original extension
-    to the stem (e.g. ``readme.md`` + ``readme.txt`` → ``readme_md.md`` + ``readme_txt.md``).
-    """
-    from collections import defaultdict
-
-    # Compute initial relative output paths (preserving directory structure)
-    initial: dict[Path, Path] = {}
-    for f in source_files:
-        initial[f] = f.relative_to(source_dir).with_suffix(".md")
-
-    # Group by output path to find collisions
-    groups: dict[Path, list[Path]] = defaultdict(list)
-    for src, out in initial.items():
-        groups[out].append(src)
-
-    resolved: dict[Path, Path] = {}
-    for out_path, sources in groups.items():
-        if len(sources) == 1:
-            resolved[sources[0]] = out_path
-        else:
-            # Disambiguate by appending the original extension (without dot) to the stem
-            for src in sources:
-                ext_tag = src.suffix.lstrip(".")
-                new_name = f"{out_path.stem}_{ext_tag}.md"
-                resolved[src] = out_path.parent / new_name
-
-    return resolved
+    """Backward-compatible wrapper for the shared output path resolver."""
+    return pipeline_resolve_output_paths(source_files, source_dir)
 
 
 def pack_context(
@@ -137,29 +114,20 @@ def pack_context(
 ) -> Path:
     """Orchestrate full pipeline: convert all docs and generate agent context pack."""
     ensure_registry_loaded()
-    exts = set(supported_extensions())
     docs_dir = output_dir / "docs"
     docs_dir.mkdir(parents=True, exist_ok=True)
 
-    results: list[ConvertResult] = []
-    all_output_files: list[str] = []
-    original_sources: list[str] = []
-
     # Find and convert all supported files
-    source_files = sorted(
-        f for f in source_dir.rglob("*") if f.is_file() and f.suffix.lower() in exts
-    )
+    source_files = discover_source_files(source_dir)
 
     output_map = resolve_output_paths(source_files, source_dir)
+    all_metadata: list[DocumentMetadata | None] = [None] * len(source_files)
+    doc_output_files: list[str] = [""] * len(source_files)
+    original_sources: list[str] = [""] * len(source_files)
 
-    for source_file in source_files:
-        ext = source_file.suffix.lower()
-        converter = get_converter(ext)
-        result = converter.convert(source_file)
-        results.append(result)
-
+    for index, source_file, result in iter_converted_documents(source_files):
         # Save original source as relative path before overwriting
-        original_sources.append(source_file.relative_to(source_dir).as_posix())
+        original_sources[index] = source_file.relative_to(source_dir).as_posix()
 
         # Point source to the output markdown so agents read the converted file
         out_rel = output_map[source_file]
@@ -168,10 +136,13 @@ def pack_context(
         out_path = docs_dir / out_rel
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(md_with_frontmatter, encoding="utf-8")
-        all_output_files.append(f"docs/{out_rel.as_posix()}")
+        all_metadata[index] = result.metadata
+        doc_output_files[index] = f"docs/{out_rel.as_posix()}"
 
     # Generate meta files
-    all_metadata = [r.metadata for r in results]
+    all_metadata = [meta for meta in all_metadata if meta is not None]
+    all_output_files = [path for path in doc_output_files if path]
+    original_sources = [source for source in original_sources if source]
 
     resolved = resolve_agents(agents or ["claude"])
     for agent in resolved:
