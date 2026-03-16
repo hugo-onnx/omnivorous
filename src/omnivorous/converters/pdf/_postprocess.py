@@ -58,6 +58,9 @@ _DOTTED_LEADER_RE = re.compile(r"\.{3,}")
 _PAGE_NUM_ONLY_RE = re.compile(r"^\d{1,4}\s*$")
 _SECTION_ENTRY_RE = re.compile(r"^\d+(\.\d+)*\s+\S.*\d+\s*$")
 _HEADING_RE = re.compile(r"^#{1,6}\s+", re.MULTILINE)
+_NUMERIC_HEADING_RE = re.compile(r"^\d+(?:\.\d+)*\s+\S.*$")
+_PAGE_MARKER_RE = re.compile(r"\[Page\s+\d+\]", re.IGNORECASE)
+_CODE_FENCE_RE = re.compile(r"^```")
 
 
 def _is_toc_line(line: str) -> bool:
@@ -81,6 +84,58 @@ def _is_prose(line: str) -> bool:
     return len(line.strip()) >= 40 and not _is_toc_line(line)
 
 
+def _is_ignorable_boundary_line(line: str) -> bool:
+    """Return True for structural lines that should not end a TOC block."""
+    stripped = line.strip()
+    if not stripped:
+        return True
+    if _CODE_FENCE_RE.match(stripped):
+        return True
+    if _PAGE_MARKER_RE.search(stripped):
+        return True
+    return False
+
+
+def _is_content_heading(line: str) -> bool:
+    """Return True if *line* looks like a real section heading, not a TOC entry."""
+    stripped = line.strip()
+    if not stripped or _is_ignorable_boundary_line(stripped):
+        return False
+    if _HEADING_RE.match(stripped):
+        return True
+    return bool(_NUMERIC_HEADING_RE.match(stripped) and not _SECTION_ENTRY_RE.match(stripped))
+
+
+def _is_content_boundary(lines: list[str], start: int) -> bool:
+    """Return True if *start* begins real content after a TOC block."""
+    prose_count = 0
+    heading_seen = False
+    examined = 0
+
+    for line in lines[start:]:
+        stripped = line.strip()
+        if _is_ignorable_boundary_line(stripped):
+            continue
+        examined += 1
+        if _is_toc_line(stripped):
+            return False
+        if _is_content_heading(stripped):
+            heading_seen = True
+        elif _is_prose(stripped):
+            prose_count += 1
+        else:
+            return False
+
+        if heading_seen and prose_count >= 1:
+            return True
+        if prose_count >= 2:
+            return True
+        if examined >= 8:
+            break
+
+    return False
+
+
 def strip_toc(text: str) -> str:
     """Detect and remove a Table of Contents section from *text*."""
     m = _TOC_START_RE.search(text)
@@ -95,18 +150,10 @@ def strip_toc(text: str) -> str:
     i = 0
     while i < len(lines):
         line = lines[i]
-        if _HEADING_RE.match(line):
-            # Check if real content follows within 3 non-empty lines
-            non_empty_seen = 0
-            for j in range(i + 1, len(lines)):
-                if lines[j].strip():
-                    non_empty_seen += 1
-                    if _is_prose(lines[j]):
-                        # Found real content — this heading is the boundary
-                        end_offset = sum(len(ln) + 1 for ln in lines[:i])
-                        return text[:toc_start].rstrip("\n") + "\n\n" + rest[end_offset:]
-                    if non_empty_seen >= 3:
-                        break
+        if _is_content_heading(line) or _is_prose(line):
+            if _is_content_boundary(lines, i):
+                end_offset = sum(len(ln) + 1 for ln in lines[:i])
+                return text[:toc_start].rstrip("\n") + "\n\n" + rest[end_offset:]
         i += 1
 
     # TOC runs to end of document
