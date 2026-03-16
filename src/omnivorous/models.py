@@ -23,6 +23,7 @@ class DocumentMetadata:
     def to_dict(self) -> dict:
         return {
             "source": self.source,
+            "format": self.format,
             "title": self.title,
             "pages": self.pages,
             "headings": self.headings,
