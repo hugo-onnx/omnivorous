@@ -5,25 +5,26 @@ from __future__ import annotations
 from pathlib import Path
 
 from rich.console import Console
+from rich.markup import escape
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 console = Console(stderr=True)
 
 
 def print_success(message: str) -> None:
-    console.print(f"[green]{message}[/green]")
+    console.print(f"[green]{escape(message)}[/green]", soft_wrap=True)
 
 
 def print_error(message: str) -> None:
-    console.print(f"[bold red]Error:[/bold red] {message}")
+    console.print(f"[bold red]Error:[/bold red] {escape(message)}", soft_wrap=True)
 
 
 def print_warning(message: str) -> None:
-    console.print(f"[yellow]Warning:[/yellow] {message}")
+    console.print(f"[yellow]Warning:[/yellow] {escape(message)}", soft_wrap=True)
 
 
 def print_info(message: str) -> None:
-    console.print(f"[dim]{message}[/dim]")
+    console.print(f"[dim]{escape(message)}[/dim]", soft_wrap=True)
 
 
 def get_progress() -> Progress:
