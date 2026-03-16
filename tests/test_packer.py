@@ -228,5 +228,3 @@ def test_resolve_output_paths_mixed(tmp_path: Path):
     assert result[f2] == Path("notes_txt.md")
     # f3 is in a subdir → no collision
     assert result[f3] == Path("sub/notes.md")
-
-
