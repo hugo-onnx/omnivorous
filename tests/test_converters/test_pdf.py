@@ -142,6 +142,114 @@ def test_pdf_table_count():
     assert result.metadata.tables == 1
 
 
+def test_pdf_falls_back_to_plain_text_for_pathological_tables():
+    raw_markdown = (
+        "|Col1|Col2|Col3|\n"
+        "|---|---|---|\n"
+        "|junk|junk|junk|\n"
+        "|junk|junk|junk|\n"
+        "|junk|junk|junk|\n"
+        "|junk|junk|junk|\n"
+    )
+    page_text = (
+        "Attention Is All You Need\n"
+        "Abstract\n"
+        "The dominant sequence transduction models are based on attention.\n"
+        "\n"
+        "1 Introduction\n"
+        "Real prose survives the fallback path.\n"
+    )
+
+    mock_to_md = MagicMock(return_value=raw_markdown)
+
+    mock_page = MagicMock()
+    mock_page.get_text.return_value = page_text
+    mock_page.get_images.return_value = []
+
+    mock_doc = MagicMock()
+    mock_doc.__len__ = MagicMock(return_value=1)
+    mock_doc.__iter__ = MagicMock(return_value=iter([mock_page]))
+    mock_open = MagicMock(return_value=mock_doc)
+
+    with patch("omnivorous.converters.pdf._pymupdf.pymupdf4llm.to_markdown", mock_to_md), \
+         patch("omnivorous.converters.pdf._pymupdf.pymupdf.open", mock_open):
+        result = PdfConverter().convert(Path("test.pdf"))
+
+    assert "|Col1|" not in result.content
+    assert "# Attention Is All You Need" in result.content
+    assert "## 1 Introduction" in result.content
+    assert "Real prose survives the fallback path." in result.content
+    assert result.metadata.tables == 0
+
+
+def test_pdf_prefers_real_title_over_attribution_line_in_plain_text_fallback():
+    raw_markdown = "|Col1|Col2|\n|---|---|\n|junk|junk|\n|junk|junk|\n|junk|junk|\n|junk|junk|\n"
+    page_text = (
+        "Provided proper attribution is provided, Google hereby grants permission to\n"
+        "Attention Is All You Need\n"
+        "Abstract\n"
+        "Transformers rely on attention.\n"
+    )
+
+    mock_to_md = MagicMock(return_value=raw_markdown)
+
+    mock_page = MagicMock()
+    mock_page.get_text.return_value = page_text
+    mock_page.get_images.return_value = []
+
+    mock_doc = MagicMock()
+    mock_doc.__len__ = MagicMock(return_value=1)
+    mock_doc.__iter__ = MagicMock(return_value=iter([mock_page]))
+    mock_open = MagicMock(return_value=mock_doc)
+
+    with patch("omnivorous.converters.pdf._pymupdf.pymupdf4llm.to_markdown", mock_to_md), \
+         patch("omnivorous.converters.pdf._pymupdf.pymupdf.open", mock_open):
+        result = PdfConverter().convert(Path("test.pdf"))
+
+    assert result.content.startswith("# Attention Is All You Need")
+    assert "# Provided proper attribution is provided" not in result.content
+
+
+def test_pdf_falls_back_to_plain_text_for_preformatted_headingless_markdown():
+    raw_markdown = (
+        "```\n"
+        "Network Working Group                   R. Fielding\n"
+        "Hypertext Transfer Protocol -- HTTP/1.1\n"
+        "Status of This Memo\n"
+        "Abstract\n"
+        "1. Introduction\n"
+        "```\n"
+    )
+    page_text = (
+        "Network Working Group                   R. Fielding\n"
+        "Hypertext Transfer Protocol -- HTTP/1.1\n"
+        "Status of This Memo\n"
+        "Abstract\n"
+        "1. Introduction\n"
+        "Protocol overview.\n"
+    )
+
+    mock_to_md = MagicMock(return_value=raw_markdown)
+
+    mock_page = MagicMock()
+    mock_page.get_text.return_value = page_text
+    mock_page.get_images.return_value = []
+
+    mock_doc = MagicMock()
+    mock_doc.__len__ = MagicMock(return_value=1)
+    mock_doc.__iter__ = MagicMock(return_value=iter([mock_page]))
+    mock_open = MagicMock(return_value=mock_doc)
+
+    with patch("omnivorous.converters.pdf._pymupdf.pymupdf4llm.to_markdown", mock_to_md), \
+         patch("omnivorous.converters.pdf._pymupdf.pymupdf.open", mock_open):
+        result = PdfConverter().convert(Path("test.pdf"))
+
+    assert not result.content.startswith("```")
+    assert "# Hypertext Transfer Protocol -- HTTP/1.1" in result.content
+    assert "## Status of This Memo" in result.content
+    assert "## 1. Introduction" in result.content
+
+
 # --- Marker engine tests ---
 
 
