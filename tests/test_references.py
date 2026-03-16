@@ -47,3 +47,46 @@ def test_resolve_references_matches_explicit_targets():
     assert "billing-doc" in resolved
     signal_types = {match.signal_type for match in resolved["billing-doc"]}
     assert {"path", "identifier", "section", "symbol"} <= signal_types
+
+
+def test_extract_reference_candidates_ignores_generic_symbols():
+    candidates = extract_reference_candidates(
+        "Read `THE`, `III`, and `PaymentClient` before section 4."
+    )
+
+    assert "PaymentClient" in candidates["symbol"]
+    assert "THE" not in candidates["symbol"]
+    assert "III" not in candidates["symbol"]
+
+
+def test_resolve_references_skips_ambiguous_or_low_confidence_sections():
+    index = build_reference_index(
+        [
+            ReferenceTarget(
+                key="doc-a",
+                path="docs/full/a.md",
+                kind="document",
+                label="Doc A",
+                group="docs/full/a.md",
+                section_numbers=("2.1", "4"),
+            ),
+            ReferenceTarget(
+                key="doc-b",
+                path="docs/full/b.md",
+                kind="document",
+                label="Doc B",
+                group="docs/full/b.md",
+                section_numbers=("2.1", "4"),
+            ),
+        ]
+    )
+
+    resolved = resolve_references(
+        "Compare section 2.1 and section 4 before shipping.",
+        index,
+        source_key="overview-doc",
+        source_group="docs/full/overview.md",
+        different_group_only=True,
+    )
+
+    assert resolved == {}
