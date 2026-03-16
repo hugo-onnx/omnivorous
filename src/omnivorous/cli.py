@@ -217,6 +217,17 @@ def pack(
         "-m",
         help="PDF mode: fast (default) or scientific (LaTeX formulas).",
     ),
+    chunk_size: int = typer.Option(
+        500,
+        "--chunk-size",
+        min=1,
+        help="Target chunk size in tokens.",
+    ),
+    chunk_by: str = typer.Option(
+        "heading",
+        "--chunk-by",
+        help="Chunking strategy: heading or tokens.",
+    ),
 ) -> None:
     """Generate an agent context pack from a folder of documents."""
     from omnivorous.agents import resolve_agents
@@ -241,7 +252,13 @@ def pack(
     with get_progress() as progress:
         progress.add_task("Packing agent context...", total=None)
         try:
-            pack_context(folder, out_dir, agents=agent_names)
+            pack_context(
+                folder,
+                out_dir,
+                agents=agent_names,
+                chunk_size=chunk_size,
+                chunk_by=chunk_by,
+            )
         except ValueError as exc:
             print_error(str(exc))
             raise typer.Exit(1)
@@ -251,4 +268,5 @@ def pack(
         print_info(f"  {a.file_path} — {a.display_name} instructions")
     print_info("  PROJECT_CONTEXT.md — documentation summary")
     print_info("  manifest.json — file manifest")
-    print_info("  docs/ — converted documents")
+    print_info("  docs/chunks/ — chunked documents for focused reading")
+    print_info("  docs/full/ — full converted documents")
