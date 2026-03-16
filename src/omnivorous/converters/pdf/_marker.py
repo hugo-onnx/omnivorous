@@ -8,6 +8,11 @@ import re
 from pathlib import Path
 
 from omnivorous.converters.pdf._engine import PdfExtractionResult
+from omnivorous.converters.pdf._postprocess import (
+    fix_drop_caps,
+    normalize_ligatures,
+    strip_toc,
+)
 
 # Regex to count markdown tables (header + separator row)
 _TABLE_RE = re.compile(r"^\|.+\|\n\|[\s\-:|]+\|", re.MULTILINE)
@@ -66,6 +71,9 @@ class MarkerEngine:
             rendered = converter(str(path))
 
         content: str = rendered.markdown
+        content = normalize_ligatures(content)
+        content = fix_drop_caps(content)
+        content = strip_toc(content)
 
         # Count tables and headings from the markdown output
         total_tables = len(_TABLE_RE.findall(content))
