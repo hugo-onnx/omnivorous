@@ -23,6 +23,37 @@ _SYMBOL_RE = re.compile(
     r"|[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+"
     r")\b"
 )
+_GENERIC_SYMBOLS = {
+    "a",
+    "all",
+    "and",
+    "any",
+    "appendix",
+    "ascii",
+    "before",
+    "chapter",
+    "chorus",
+    "copyright",
+    "distribute",
+    "ebook",
+    "first",
+    "full",
+    "gutenberg",
+    "king",
+    "license",
+    "prince",
+    "project",
+    "queen",
+    "second",
+    "start",
+    "the",
+    "u.s",
+    "war",
+}
+_ROMAN_NUMERAL_RE = re.compile(
+    r"^(?=[IVXLCDM]+$)M{0,4}(CM|CD|D?C{0,3})"
+    r"(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})$"
+)
 
 
 @dataclass(frozen=True)
@@ -103,10 +134,7 @@ def extract_symbols(text: str, *, limit: int = 24) -> list[str]:
 
     normalized = []
     for symbol in _dedupe(symbols):
-        lowered = symbol.lower()
-        if lowered in {"section", "table", "figure", "appendix"}:
-            continue
-        if "." not in symbol and "_" not in symbol and not any(ch.isupper() for ch in symbol[1:]):
+        if not _is_symbol_like(symbol):
             continue
         normalized.append(symbol)
         if len(normalized) >= limit:
@@ -132,7 +160,8 @@ def extract_reference_candidates(text: str) -> dict[str, list[str]]:
         if " " in phrase:
             headings.append(phrase)
         else:
-            symbols.append(phrase)
+            if _is_symbol_like(phrase):
+                symbols.append(phrase)
 
     return {
         "path": _dedupe(paths),
@@ -167,7 +196,7 @@ def build_reference_index(targets: list[ReferenceTarget]) -> ReferenceIndex:
                 heading_index[normalized].append(target.key)
         for symbol in target.symbols:
             normalized = _normalize_symbol(symbol)
-            if normalized:
+            if normalized and _is_symbol_like(symbol):
                 symbol_index[normalized].append(target.key)
 
     index.paths = {key: _dedupe(values) for key, values in path_index.items()}
@@ -216,9 +245,12 @@ def resolve_references(
             different_group_only=different_group_only,
         )
     for section in candidates["section"]:
+        section_targets = _resolve_target_keys(index.sections, section)
+        if not _is_high_confidence_section(section, section_targets):
+            continue
         _append_matches(
             matches,
-            _resolve_target_keys(index.sections, section),
+            section_targets,
             index,
             "section",
             0.9,
@@ -228,9 +260,12 @@ def resolve_references(
             different_group_only=different_group_only,
         )
     for heading in candidates["heading"]:
+        heading_targets = _resolve_target_keys(index.headings, _normalize_heading(heading))
+        if len(heading_targets) != 1:
+            continue
         _append_matches(
             matches,
-            _resolve_target_keys(index.headings, _normalize_heading(heading)),
+            heading_targets,
             index,
             "heading",
             0.84,
@@ -240,9 +275,12 @@ def resolve_references(
             different_group_only=different_group_only,
         )
     for symbol in candidates["symbol"]:
+        symbol_targets = _resolve_target_keys(index.symbols, _normalize_symbol(symbol))
+        if len(symbol_targets) != 1:
+            continue
         _append_matches(
             matches,
-            _resolve_target_keys(index.symbols, _normalize_symbol(symbol)),
+            symbol_targets,
             index,
             "symbol",
             0.78,
@@ -312,6 +350,32 @@ def _normalize_heading(heading: str) -> str:
 def _normalize_symbol(symbol: str) -> str:
     normalized = symbol.strip().rstrip("()").replace("`", "")
     return normalized.lower()
+
+
+def _is_symbol_like(symbol: str) -> bool:
+    normalized = _normalize_symbol(symbol)
+    if not normalized or normalized in _GENERIC_SYMBOLS:
+        return False
+    if _ROMAN_NUMERAL_RE.fullmatch(normalized.upper()):
+        return False
+    if "." in normalized:
+        parts = normalized.split(".")
+        if all(part.isalpha() and part.upper() == part and len(part) == 1 for part in parts):
+            return False
+        return any(any(ch.islower() for ch in part) for part in parts)
+    if "_" in normalized:
+        return True
+    if re.fullmatch(r"(?:[A-Z][a-z0-9]+){2,}", symbol):
+        return True
+    return False
+
+
+def _is_high_confidence_section(section: str, targets: list[str]) -> bool:
+    if not targets:
+        return False
+    if "." in section:
+        return len(targets) == 1
+    return False
 
 
 def _dedupe(values) -> list[str]:
