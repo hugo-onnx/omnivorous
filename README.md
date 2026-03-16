@@ -45,12 +45,12 @@ omni pack docs/ --agent all
 
 ## How It Works
 
-omnivorous processes documents through a four-stage pipeline:
+omnivorous processes documents through a three-stage pipeline:
 
 1. **Convert** — Each format has a dedicated converter that produces clean Markdown. PDFs use pymupdf4llm for accurate layout extraction with ligature repair and header/footer removal (or marker-pdf in `--mode scientific` for LaTeX formula reconstruction); HTML gets nav, script, and boilerplate stripping; DOCX preserves structure while dropping styling.
    When processing folders, omnivorous converts files in parallel by default where it is safe to do so.
 2. **Extract metadata** — Page count, headings, tables, and token count are recorded as YAML frontmatter.
-3. **Pack** — Agent instruction files, a project context map, a chunk-aware manifest, chunked docs, full converted docs, and deterministic cross-document relationship hints are assembled into a ready-to-use context pack.
+3. **Pack** — Agent instruction files, a project context map, a chunk-aware manifest, chunked docs, full converted docs, and deterministic cross-document relationship hints are assembled into a ready-to-use context pack. Relationships combine explicit references like file paths, IDs, and section numbers with lexical similarity, without relying on third-party LLMs.
 
 ## Supported Formats
 
@@ -68,7 +68,7 @@ All commands accept `--encoding` to select the tiktoken encoding used for token 
 Generate a full agent context pack with:
 - Agent instruction file (varies by target agent)
 - `PROJECT_CONTEXT.md` — Documentation map, navigation hints, and cross-document bridges
-- `manifest.json` — Chunk-aware file manifest with deterministic relationship metadata
+- `manifest.json` — Chunk-aware file manifest with hard-link and lexical relationship metadata
 - `docs/chunks/` — Focused context for agents
 - `docs/full/` — Full converted documents for fallback reading
 
