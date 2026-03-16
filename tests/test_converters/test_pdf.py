@@ -155,3 +155,27 @@ def test_marker_not_installed_error():
                 MarkerEngine().extract(Path("test.pdf"))
     finally:
         set_pdf_engine(original)
+
+
+# --- TOC stripping integration test ---
+
+
+def test_pdf_toc_stripped():
+    """TOC section should be removed from PyMuPDF output."""
+    md_with_toc = (
+        "# RFC 2616\n\n"
+        "## Table of Contents\n\n"
+        "1.1  Purpose......7\n"
+        "1.2  Requirements......8\n"
+        "2.1  Augmented BNF......12\n\n"
+        "## Introduction\n\n"
+        "The Hypertext Transfer Protocol is an application-level protocol.\n"
+    )
+    mock_to_md, mock_open = _mock_pymupdf4llm_convert(md_with_toc)
+    with patch("omnivorous.converters.pdf._pymupdf.pymupdf4llm.to_markdown", mock_to_md), \
+         patch("omnivorous.converters.pdf._pymupdf.pymupdf.open", mock_open):
+        result = PdfConverter().convert(Path("test.pdf"))
+    assert "Table of Contents" not in result.content
+    assert "Purpose......7" not in result.content
+    assert "## Introduction" in result.content
+    assert "application-level protocol" in result.content
