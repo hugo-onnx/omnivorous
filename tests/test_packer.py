@@ -553,6 +553,80 @@ def test_filter_document_relationships_requires_multiple_anchor_terms():
     assert filtered["docs/full/source.md"] == []
 
 
+def test_filter_document_relationships_filters_weak_hybrid_semantic_edges():
+    documents = [
+        {
+            "full_path": "docs/full/source.md",
+            "keywords": ["chapter", "whale", "voyage"],
+        },
+        {
+            "full_path": "docs/full/target.md",
+            "keywords": ["chapter", "battle", "campaign"],
+        },
+    ]
+    edges = {
+        "docs/full/source.md": [
+            {
+                "target_path": "docs/full/target.md",
+                "target_kind": "document",
+                "target_title": "target",
+                "target_heading": None,
+                "relationship_type": "hybrid",
+                "score": 0.64,
+                "signal_scores": {
+                    "lexical_similarity": 0.12,
+                    "semantic_similarity": 0.62,
+                },
+                "evidence": {"shared_terms": ["chapter"], "references": []},
+            }
+        ],
+        "docs/full/target.md": [],
+    }
+
+    filtered = _filter_document_relationships(documents, edges)
+
+    assert filtered["docs/full/source.md"] == []
+
+
+def test_filter_document_relationships_keeps_hybrid_edges_with_multiple_anchor_terms():
+    documents = [
+        {
+            "full_path": "docs/full/source.md",
+            "keywords": ["reglamento", "inteligencia", "artificial", "riesgo"],
+        },
+        {
+            "full_path": "docs/full/target.md",
+            "keywords": ["reglamento", "inteligencia", "artificial", "sistemas"],
+        },
+    ]
+    edges = {
+        "docs/full/source.md": [
+            {
+                "target_path": "docs/full/target.md",
+                "target_kind": "document",
+                "target_title": "target",
+                "target_heading": None,
+                "relationship_type": "hybrid",
+                "score": 0.677,
+                "signal_scores": {
+                    "lexical_similarity": 0.11,
+                    "semantic_similarity": 0.66,
+                },
+                "evidence": {
+                    "shared_terms": ["reglamento", "inteligencia", "artificial"],
+                    "references": [],
+                },
+            }
+        ],
+        "docs/full/target.md": [],
+    }
+
+    filtered = _filter_document_relationships(documents, edges)
+
+    assert len(filtered["docs/full/source.md"]) == 1
+    assert filtered["docs/full/source.md"][0]["target_path"] == "docs/full/target.md"
+
+
 def test_pack_context_filters_generic_legal_false_positives(tmp_path: Path):
     source = tmp_path / "source"
     source.mkdir()
