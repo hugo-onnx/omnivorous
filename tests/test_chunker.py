@@ -4,6 +4,7 @@ from pathlib import Path
 
 from omnivorous.chunker import chunk_by_headings, chunk_by_tokens, chunk_markdown, write_chunks
 from omnivorous.models import DocumentMetadata
+from omnivorous.tokens import count_tokens
 
 
 def _meta() -> DocumentMetadata:
@@ -66,6 +67,20 @@ def test_chunk_by_tokens_preserves_code_fences():
         assert fence_count % 2 == 0, f"Chunk has unclosed fence: {chunk!r}"
 
 
+def test_chunk_by_tokens_respects_structural_breaks_when_enabled():
+    content = (
+        "# book\n\n"
+        + "Intro paragraph with enough words to cross the threshold. " * 8
+        + "\n\nCHAPTER I\n\n"
+        + "First chapter body.\n\nCHAPTER II\n\nSecond chapter body."
+    )
+
+    chunks = chunk_by_tokens(content, chunk_size=80, respect_structure=True)
+
+    assert len(chunks) >= 2
+    assert any(chunk.startswith("CHAPTER I") for chunk in chunks[1:])
+
+
 def test_chunk_by_headings_merges_heading_only():
     content = "# A\n\n## B\n\nText under B."
     chunks = chunk_by_headings(content)
@@ -82,3 +97,15 @@ def test_chunk_by_headings_setext():
     assert len(chunks) == 2
     assert "Title" in chunks[0]
     assert "Subtitle" in chunks[1]
+
+
+def test_chunk_markdown_heading_strategy_uses_smaller_fallback_for_unstructured_docs():
+    content = "# book\n\n" + "\n\n".join(
+        f"Paragraph {i} with enough text to produce several tokens and force a split."
+        for i in range(120)
+    )
+
+    result = chunk_markdown(content, _meta(), strategy="heading", chunk_size=500)
+
+    assert len(result.chunks) > 1
+    assert max(count_tokens(chunk) for chunk in result.chunks) <= 1100
