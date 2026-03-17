@@ -26,4 +26,4 @@ jobs:
           key: fastembed-${{ runner.os }}-bge-small-en-v1.5
       - run: uv sync --extra dev --extra semantic
       - run: uv run omni warm-embeddings --cache-dir "${OMNIVOROUS_EMBEDDING_MODEL_CACHE_DIR}"
-      - run: uv run python scripts/release_gates.py --source test-docs --retrieval-cases evals/retrieval_cases.json --semantic-smoke-source tests/fixtures --embedding-cache-dir "${OMNIVOROUS_EMBEDDING_CACHE_DIR}" --embedding-model-cache-dir "${OMNIVOROUS_EMBEDDING_MODEL_CACHE_DIR}"
+      - run: uv run python scripts/release_gates.py --source evals/release_corpus --retrieval-cases evals/retrieval_cases.json --semantic-smoke-source tests/fixtures --embedding-cache-dir "${OMNIVOROUS_EMBEDDING_CACHE_DIR}" --embedding-model-cache-dir "${OMNIVOROUS_EMBEDDING_MODEL_CACHE_DIR}"
