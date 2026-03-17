@@ -248,6 +248,16 @@ def pack(
         "--embedding-cache-dir",
         help="Optional cache directory for local embeddings.",
     ),
+    embedding_model_cache_dir: Optional[Path] = typer.Option(
+        None,
+        "--embedding-model-cache-dir",
+        help="Optional cache directory for local embedding model files.",
+    ),
+    semantic_offline: bool = typer.Option(
+        False,
+        "--semantic-offline",
+        help="Require semantic mode to use pre-cached local model files only.",
+    ),
 ) -> None:
     """Generate an agent context pack from a folder of documents."""
     from omnivorous.agents import resolve_agents
@@ -282,6 +292,8 @@ def pack(
                 embedding_backend=embedding_backend,
                 embedding_model=embedding_model,
                 embedding_cache_dir=embedding_cache_dir,
+                embedding_model_cache_dir=embedding_model_cache_dir,
+                semantic_offline=semantic_offline,
             )
         except ValueError as exc:
             print_error(str(exc))
@@ -297,3 +309,41 @@ def pack(
     print_info("  manifest.json — file manifest")
     print_info("  docs/chunks/ — chunked documents for focused reading")
     print_info("  docs/full/ — full converted documents")
+
+
+@app.command("warm-embeddings")
+def warm_embeddings(
+    model: str = typer.Option(
+        "BAAI/bge-small-en-v1.5",
+        "--model",
+        help="Embedding model to prefetch for semantic mode.",
+    ),
+    cache_dir: Optional[Path] = typer.Option(
+        None,
+        "--cache-dir",
+        help="Optional cache directory for embedding model files.",
+    ),
+    offline: bool = typer.Option(
+        False,
+        "--offline",
+        help="Use only local files and fail if the model is not already cached.",
+    ),
+) -> None:
+    """Prefetch the local embedding model used by semantic mode."""
+    from omnivorous.embeddings import default_embedding_model_cache_dir, warm_embedding_model
+
+    resolved_cache_dir = cache_dir or default_embedding_model_cache_dir()
+
+    with get_progress() as progress:
+        progress.add_task("Preparing embedding model...", total=None)
+        try:
+            warm_embedding_model(
+                cache_dir=resolved_cache_dir,
+                model_name=model,
+                local_files_only=offline,
+            )
+        except ImportError as exc:
+            print_error(str(exc))
+            raise typer.Exit(1)
+
+    print_success(f"Embedding model ready in {resolved_cache_dir}")
