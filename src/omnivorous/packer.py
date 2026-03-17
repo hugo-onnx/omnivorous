@@ -15,6 +15,7 @@ from omnivorous.embeddings import (
     EmbeddingNode,
     LocalEmbeddingService,
     default_embedding_cache_dir,
+    default_embedding_model_cache_dir,
 )
 from omnivorous.frontmatter import add_frontmatter
 from omnivorous.models import DocumentMetadata
@@ -675,6 +676,8 @@ def pack_context(
     embedding_backend: str = "fastembed",
     embedding_model: str | None = None,
     embedding_cache_dir: Path | None = None,
+    embedding_model_cache_dir: Path | None = None,
+    semantic_offline: bool = False,
     embedding_service: LocalEmbeddingService | None = None,
 ) -> Path:
     """Orchestrate full pipeline: convert all docs and generate agent context pack."""
@@ -907,6 +910,8 @@ def pack_context(
             cache_dir=embedding_cache_dir or default_embedding_cache_dir(),
             backend_name=embedding_backend,
             model_name=embedding_model,
+            model_cache_dir=embedding_model_cache_dir or default_embedding_model_cache_dir(),
+            local_files_only=semantic_offline,
         )
         document_semantic_relationships = semantic_service.build_relationships(
             document_embedding_nodes,
