@@ -50,6 +50,70 @@ def test_retrieval_eval_finds_expected_documents_and_chunks(tmp_path: Path):
         ),
     ]
 
-    results = evaluate_retrieval(manifest, cases)
+    results = evaluate_retrieval(manifest, cases, output_dir=out)
 
     assert all(result.passed for result in results)
+
+
+def test_retrieval_eval_ranks_hyphenated_identifiers_first(tmp_path: Path):
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "eu-ai-procurement-clauses.md").write_text(
+        "# Standard contractual clauses\n\n"
+        "Procurement clauses for artificial intelligence systems used by public organisations.\n"
+    )
+    (source / "overview.md").write_text(
+        "# Overview\n\n"
+        "General risk management system overview for enterprise delivery teams.\n"
+    )
+
+    out = tmp_path / "pack"
+    pack_context(source, out, chunk_size=40, chunk_by="tokens")
+    manifest = json.loads((out / "manifest.json").read_text())
+
+    result = evaluate_retrieval(
+        manifest,
+        [
+            RetrievalCase(
+                case_id="procurement",
+                query="Which AI procurement clauses document applies to public organisations?",
+                expected_document="eu-ai-procurement-clauses.md",
+                top_k=1,
+            )
+        ],
+        output_dir=out,
+    )[0]
+
+    assert result.document_rank == 1
+    assert result.passed is True
+
+
+def test_retrieval_eval_uses_full_pack_text_for_late_matches(tmp_path: Path):
+    source = tmp_path / "source"
+    source.mkdir()
+    late_match = "\n\n".join(f"Paragraph {index}: background material." for index in range(18))
+    (source / "caching-guide.txt").write_text(
+        late_match
+        + "\n\nValidation uses ETag headers and Cache-Control directives to reuse stored responses."
+    )
+    (source / "rules.md").write_text("# Rules\n\nGeneral rules for contributors and release management.")
+
+    out = tmp_path / "pack"
+    pack_context(source, out, chunk_size=15, chunk_by="tokens")
+    manifest = json.loads((out / "manifest.json").read_text())
+
+    result = evaluate_retrieval(
+        manifest,
+        [
+            RetrievalCase(
+                case_id="http-cache",
+                query="Where are Cache-Control and ETag validation rules described?",
+                expected_document="caching-guide.txt",
+                top_k=1,
+            )
+        ],
+        output_dir=out,
+    )[0]
+
+    assert result.document_rank == 1
+    assert result.passed is True
