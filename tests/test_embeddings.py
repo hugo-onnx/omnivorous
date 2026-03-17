@@ -2,7 +2,13 @@
 
 from pathlib import Path
 
-from omnivorous.embeddings import EmbeddingNode, LocalEmbeddingService
+from omnivorous.embeddings import (
+    EmbeddingNode,
+    LocalEmbeddingService,
+    default_embedding_cache_dir,
+    default_embedding_model_cache_dir,
+    resolve_embedding_local_files_only,
+)
 
 
 class FakeBackend:
@@ -119,3 +125,18 @@ def test_local_embedding_service_normalizes_json_unsafe_scalars(tmp_path: Path):
     assert relationships["a"][0].target_key == "b"
     cache_files = list(tmp_path.glob("*.json"))
     assert cache_files
+
+
+def test_default_embedding_model_cache_dir_uses_env(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("OMNIVOROUS_EMBEDDING_CACHE_DIR", str(tmp_path / "vectors"))
+    monkeypatch.setenv("OMNIVOROUS_EMBEDDING_MODEL_CACHE_DIR", str(tmp_path / "models"))
+
+    assert default_embedding_cache_dir() == tmp_path / "vectors"
+    assert default_embedding_model_cache_dir() == tmp_path / "models"
+
+
+def test_resolve_embedding_local_files_only_uses_env(monkeypatch):
+    monkeypatch.setenv("OMNIVOROUS_EMBEDDING_LOCAL_FILES_ONLY", "true")
+
+    assert resolve_embedding_local_files_only() is True
+    assert resolve_embedding_local_files_only(False) is False
