@@ -393,9 +393,11 @@ def test_pack_context_uses_external_default_embedding_cache(
             cache_dir: Path,
             backend_name: str = "fastembed",
             model_name: str | None = None,
+            model_cache_dir: Path | None = None,
+            local_files_only: bool | None = None,
             backend=None,
         ):
-            del backend_name, model_name, backend
+            del backend_name, model_name, model_cache_dir, local_files_only, backend
             recorded["cache_dir"] = cache_dir
 
         def build_relationships(self, nodes, **kwargs):
@@ -410,6 +412,51 @@ def test_pack_context_uses_external_default_embedding_cache(
     assert recorded["cache_dir"] != out / ".omnivorous-cache"
     assert out not in recorded["cache_dir"].parents
     assert not (out / ".omnivorous-cache").exists()
+
+
+def test_pack_context_passes_semantic_offline_configuration(tmp_path: Path, monkeypatch):
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "alpha.md").write_text("# Alpha\n\nWidget recovery procedures.")
+    (source / "beta.md").write_text("# Beta\n\nSubsystem restoration notes.")
+
+    recorded: dict[str, object] = {}
+
+    class RecordingEmbeddingService:
+        def __init__(
+            self,
+            *,
+            cache_dir: Path,
+            backend_name: str = "fastembed",
+            model_name: str | None = None,
+            model_cache_dir: Path | None = None,
+            local_files_only: bool | None = None,
+            backend=None,
+        ):
+            del cache_dir, backend_name, model_name, backend
+            recorded["model_cache_dir"] = model_cache_dir
+            recorded["local_files_only"] = local_files_only
+
+        def build_relationships(self, nodes, **kwargs):
+            del nodes, kwargs
+            return {}
+
+    monkeypatch.setattr("omnivorous.packer.LocalEmbeddingService", RecordingEmbeddingService)
+
+    out = tmp_path / "agent-context"
+    model_cache_dir = tmp_path / "model-cache"
+    pack_context(
+        source,
+        out,
+        chunk_size=20,
+        chunk_by="tokens",
+        enable_semantic=True,
+        semantic_offline=True,
+        embedding_model_cache_dir=model_cache_dir,
+    )
+
+    assert recorded["model_cache_dir"] == model_cache_dir
+    assert recorded["local_files_only"] is True
 
 
 def test_pack_context_filters_moderate_semantic_false_positives(tmp_path: Path):
@@ -504,6 +551,26 @@ def test_filter_document_relationships_requires_multiple_anchor_terms():
     filtered = _filter_document_relationships(documents, edges)
 
     assert filtered["docs/full/source.md"] == []
+
+
+def test_pack_context_filters_generic_legal_false_positives(tmp_path: Path):
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "housing.md").write_text(
+        "# Housing Grant\n\n"
+        "Reglamento europeo consejo unión convocatoria de ayudas para alquiler joven.\n"
+    )
+    (source / "privacy.md").write_text(
+        "# Privacy Policy\n\n"
+        "Reglamento europeo consejo unión protección de datos y tratamiento automatizado.\n"
+    )
+
+    out = tmp_path / "agent-context"
+    pack_context(source, out, chunk_size=20, chunk_by="tokens")
+
+    manifest = json.loads((out / "manifest.json").read_text())
+    housing = next(doc for doc in manifest["documents"] if doc["title"] == "Housing Grant")
+    assert housing["related_documents"] == []
 
 
 # --- resolve_output_paths unit tests ---
