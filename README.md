@@ -216,7 +216,7 @@ uv run ruff check src/ --fix               # Auto-fix lint issues
 
 ### CI
 
-CI runs tests, linting, and builds across Python 3.10–3.13 on every push to `main` and on pull requests.
+CI runs tests, linting, and builds across Python 3.10–3.13 on Ubuntu, and also runs package-install smoke checks for built artifacts on Ubuntu, macOS, and Windows on every push to `main` and on pull requests.
 
 ## License
 
