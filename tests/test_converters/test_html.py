@@ -93,3 +93,22 @@ def test_html_cleaner_keeps_main_layout_container_with_sidebars_in_class(tmp_pat
 
     assert "# HTTP caching" in result.content
     assert "The HTTP cache stores a response." in result.content
+
+
+def test_html_promotes_heading_lists_to_sections(tmp_path: Path):
+    html = (
+        "<html><body><main><ol>"
+        "<li><h2><span>1.</span> Understand users and their needs</h2>"
+        "<p><a href='/point-1'>Read more about point 1</a></p></li>"
+        "<li><h2><span>2.</span> Solve a whole problem for users</h2>"
+        "<p><a href='/point-2'>Read more about point 2</a></p></li>"
+        "</ol></main></body></html>"
+    )
+    f = tmp_path / "service_points.html"
+    f.write_text(html, encoding="utf-8")
+
+    result = HtmlConverter().convert(f)
+
+    assert "## 1\\. Understand users and their needs" in result.content
+    assert "## 2\\. Solve a whole problem for users" in result.content
+    assert "1. ##" not in result.content
