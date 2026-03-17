@@ -20,3 +20,37 @@ jobs:
       - run: uv run pytest
       - run: uv run ruff check src tests scripts
       - run: uv build
+
+  package-smoke:
+    name: Package Smoke (${{ matrix.os }} / ${{ matrix.artifact }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python-version: "3.13"
+            artifact: wheel
+            artifact-glob: dist/*.whl
+          - os: ubuntu-latest
+            python-version: "3.13"
+            artifact: sdist
+            artifact-glob: dist/*.tar.gz
+          - os: macos-latest
+            python-version: "3.13"
+            artifact: wheel
+            artifact-glob: dist/*.whl
+          - os: windows-latest
+            python-version: "3.13"
+            artifact: wheel
+            artifact-glob: dist/*.whl
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: astral-sh/setup-uv@v5
+      - run: uv build
+      - run: python scripts/package_smoke.py --artifact-glob "${{ matrix.artifact-glob }}"
