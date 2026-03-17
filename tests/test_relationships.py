@@ -1,6 +1,6 @@
 """Tests for deterministic relationship scoring."""
 
-from omnivorous.relationships import RelationshipNode, build_relationships, extract_keywords
+from omnivorous.relationships import RelationshipNode, build_relationships, extract_keywords, tokenize
 
 
 def test_extract_keywords_deduplicates_terms():
@@ -70,3 +70,34 @@ def test_build_relationships_excludes_same_group_when_requested():
         require_different_group=True,
     )
     assert relationships["doc-a-1"][0].target_key == "doc-b-1"
+
+
+def test_tokenize_keeps_unicode_words_and_filters_multilingual_legal_stopwords():
+    tokens = tokenize("Reglamento europeo de protección de datos y tratamiento")
+
+    assert "protección" in tokens
+    assert "datos" in tokens
+    assert "reglamento" not in tokens
+    assert "europeo" not in tokens
+
+
+def test_build_relationships_ignores_generic_legal_overlap():
+    nodes = [
+        RelationshipNode(
+            key="housing",
+            label="Housing",
+            path="housing",
+            body="Reglamento europeo consejo unión convocatoria ayudas alquiler joven",
+            group="housing",
+        ),
+        RelationshipNode(
+            key="privacy",
+            label="Privacy",
+            path="privacy",
+            body="Reglamento europeo consejo unión protección datos tratamiento",
+            group="privacy",
+        ),
+    ]
+
+    relationships = build_relationships(nodes, min_score=0.01)
+    assert relationships["housing"] == []
