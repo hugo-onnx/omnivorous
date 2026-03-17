@@ -83,6 +83,24 @@ def _has_scientific_pdfs(
     return engine == "marker" and any(path.suffix.lower() == ".pdf" for path in source_files)
 
 
+def _has_pdfs(source_files: Sequence[Path]) -> bool:
+    return any(path.suffix.lower() == ".pdf" for path in source_files)
+
+
+def _resolve_pdf_worker_count(source_files: Sequence[Path]) -> int:
+    pdf_count = sum(1 for path in source_files if path.suffix.lower() == ".pdf")
+    if pdf_count == 0:
+        return 0
+
+    cpu_count = os.cpu_count() or 1
+    if _has_scientific_pdfs(source_files):
+        # Scientific extraction uses separate processes and large model state.
+        # Cap the automatic fan-out to keep memory usage bounded.
+        return min(pdf_count, cpu_count, 4)
+
+    return min(pdf_count, cpu_count)
+
+
 def resolve_worker_count(source_files: Sequence[Path]) -> int:
     """Resolve the automatic worker count for the given file set."""
     file_count = len(source_files)
@@ -92,10 +110,7 @@ def resolve_worker_count(source_files: Sequence[Path]) -> int:
     cpu_count = os.cpu_count() or 1
 
     if _has_scientific_pdfs(source_files):
-        pdf_count = sum(1 for path in source_files if path.suffix.lower() == ".pdf")
-        # Scientific extraction uses separate processes and large model state.
-        # Cap the automatic fan-out to keep memory usage bounded.
-        return min(pdf_count, cpu_count, 4)
+        return _resolve_pdf_worker_count(source_files)
 
     return min(file_count, cpu_count)
 
@@ -136,10 +151,11 @@ def _iter_process_documents(
             yield index, source_files[index], future.result()
 
 
-def _iter_mixed_scientific_documents(
+def _iter_mixed_pdf_documents(
     source_files: Sequence[Path],
 ) -> Iterator[tuple[int, Path, ConvertResult]]:
     cpu_count = os.cpu_count() or 1
+    pdf_worker_count = _resolve_pdf_worker_count(source_files)
     pdf_items = [
         (index, path) for index, path in enumerate(source_files)
         if path.suffix.lower() == ".pdf"
@@ -151,9 +167,9 @@ def _iter_mixed_scientific_documents(
 
     future_to_item: dict = {}
     with ExitStack() as stack:
-        if len(pdf_items) > 1:
+        if _has_scientific_pdfs(source_files) and len(pdf_items) > 1:
             pdf_executor = stack.enter_context(
-                ProcessPoolExecutor(max_workers=min(len(pdf_items), cpu_count, 4))
+                ProcessPoolExecutor(max_workers=pdf_worker_count)
             )
             encoding_name = get_encoding_name()
             pdf_engine = get_pdf_engine()
@@ -165,10 +181,10 @@ def _iter_mixed_scientific_documents(
                     pdf_engine,
                 )
                 future_to_item[future] = (index, path)
-        elif len(pdf_items) == 1:
+        elif pdf_items:
             pdf_executor = stack.enter_context(ThreadPoolExecutor(max_workers=1))
-            index, path = pdf_items[0]
-            future_to_item[pdf_executor.submit(_convert_path, path)] = (index, path)
+            for index, path in pdf_items:
+                future_to_item[pdf_executor.submit(_convert_path, path)] = (index, path)
 
         if other_items:
             other_executor = stack.enter_context(
@@ -195,8 +211,12 @@ def iter_converted_documents(
             yield index, path, _convert_path(path)
         return
 
-    if _has_scientific_pdfs(source_files):
-        yield from _iter_mixed_scientific_documents(source_files)
+    # PDF conversion is isolated from the generic thread pool because PyMuPDF-based
+    # extraction is not reliably deterministic when multiple PDFs are converted in
+    # parallel threads. Fast mode serializes PDF work; scientific mode keeps its
+    # separate-process fan-out because model-backed extraction is heavier.
+    if _has_pdfs(source_files):
+        yield from _iter_mixed_pdf_documents(source_files)
         return
 
     yield from _iter_threaded_documents(source_files, worker_count)
