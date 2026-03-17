@@ -1,0 +1,7 @@
+# notes
+
+This is a plain text document.
+
+It has multiple paragraphs for testing purposes.
+
+The converter should wrap this in a markdown heading.
