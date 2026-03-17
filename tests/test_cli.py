@@ -246,3 +246,26 @@ def test_pack_with_semantic_mode_missing_backend(fixtures_dir: Path, tmp_path: P
     assert "uv sync --extra semantic" in result.output
     assert "uv run --extra semantic omni pack" in result.output
     assert "omnivorous[semantic]" in result.output
+
+
+def test_warm_embeddings_command(tmp_path: Path):
+    from unittest.mock import patch
+
+    cache_dir = tmp_path / "embedding-models"
+
+    with patch("omnivorous.embeddings.warm_embedding_model", return_value=cache_dir) as warm:
+        result = runner.invoke(
+            app,
+            [
+                "warm-embeddings",
+                "--cache-dir",
+                str(cache_dir),
+                "--model",
+                "BAAI/bge-small-en-v1.5",
+                "--offline",
+            ],
+        )
+
+    assert result.exit_code == 0
+    warm.assert_called_once()
+    assert "Embedding model ready" in result.output
