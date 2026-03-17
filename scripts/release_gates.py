@@ -18,6 +18,7 @@ from omnivorous.release_checks import (
     evaluate_retrieval,
     load_manifest,
     load_retrieval_cases,
+    validate_release_corpus,
     validate_manifest,
 )
 from omnivorous.tokens import set_encoding
@@ -61,6 +62,14 @@ def main() -> int:
     set_encoding("o200k_base")
     set_pdf_engine("pymupdf")
 
+    retrieval_cases = load_retrieval_cases(args.retrieval_cases) if args.retrieval_cases else []
+    source_errors = validate_release_corpus(args.source, retrieval_cases)
+    if source_errors:
+        print("Release gates failed before packing:")
+        for error in source_errors:
+            print(f"- {error}")
+        return 1
+
     output_root = Path(tempfile.mkdtemp(prefix="omnivorous-release-gates-", dir="/tmp"))
     failures: list[str] = []
     created_dirs = [output_root]
@@ -91,9 +100,8 @@ def main() -> int:
         else:
             print("[determinism] PASS sampled PDFs are stable between standalone and packed conversion")
 
-        if args.retrieval_cases:
-            cases = load_retrieval_cases(args.retrieval_cases)
-            results = evaluate_retrieval(heading_manifest, cases, output_dir=heading_pack)
+        if retrieval_cases:
+            results = evaluate_retrieval(heading_manifest, retrieval_cases, output_dir=heading_pack)
             for result in results:
                 status = "PASS" if result.passed else "FAIL"
                 print(
@@ -208,6 +216,8 @@ def _check_pdf_determinism(source_dir: Path) -> list[str]:
         )
         if (source_dir / name).exists()
     ]
+    if not sample_files:
+        sample_files = sorted(source_dir.rglob("*.pdf"))[:3]
     if not sample_files:
         return []
 
