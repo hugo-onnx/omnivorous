@@ -221,7 +221,9 @@ def _filter_document_relationships(
         source_entry = document_lookup[source_path]
         kept: list[dict[str, Any]] = []
         for edge in edges:
-            if edge["relationship_type"] != "semantic_similarity":
+            reference_score = edge["signal_scores"].get("reference_match", 0.0)
+            semantic_score = edge["signal_scores"].get("semantic_similarity", 0.0)
+            if not semantic_score or reference_score:
                 kept.append(edge)
                 continue
 
@@ -229,7 +231,6 @@ def _filter_document_relationships(
             if target_entry is None:
                 continue
 
-            semantic_score = edge["signal_scores"].get("semantic_similarity", edge["score"])
             shared_terms = _semantic_anchor_overlap(
                 source_entry,
                 target_entry,
