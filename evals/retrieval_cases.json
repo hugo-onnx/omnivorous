@@ -2,7 +2,7 @@
   {
     "id": "attention-transformer",
     "query": "Which paper introduces the Transformer architecture based only on attention mechanisms?",
-    "expected_document": "attention-is-all-you-need.pdf",
+    "expected_document": "attention-transformer.md",
     "top_k": 3
   },
   {
@@ -15,13 +15,13 @@
   {
     "id": "http-semantics",
     "query": "Which RFC defines HTTP semantics and common protocol terminology?",
-    "expected_document": "rfc9110.txt",
+    "expected_document": "rfc9110.md",
     "top_k": 3
   },
   {
     "id": "procurement-risk-management",
     "query": "What does the AI procurement clauses document require for a risk management system before delivery?",
-    "expected_document": "eu-ai-procurement-clauses.docx",
+    "expected_document": "eu-ai-procurement-clauses.md",
     "top_k": 3
   },
   {
