@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from omnivorous.pipeline import discover_source_files
 from omnivorous.relationships import tokenize
 
 _RETRIEVAL_TOKEN_RE = re.compile(r"[^\W_]+(?:-[^\W_]+)*", re.UNICODE)
@@ -58,6 +59,34 @@ def load_manifest(path: Path) -> tuple[Path, dict[str, Any]]:
     manifest_path = path / "manifest.json" if path.is_dir() else path
     output_dir = manifest_path.parent
     return output_dir, json.loads(manifest_path.read_text(encoding="utf-8"))
+
+
+def validate_release_corpus(
+    source_dir: Path,
+    cases: list[RetrievalCase] | None = None,
+) -> list[str]:
+    """Validate that a release-gate source corpus exists and covers retrieval cases."""
+    if not source_dir.exists():
+        return [f"missing_source_dir:{source_dir}"]
+    if not source_dir.is_dir():
+        return [f"not_a_directory:{source_dir}"]
+
+    source_files = discover_source_files(source_dir)
+    if not source_files:
+        return [f"no_supported_files:{source_dir}"]
+
+    if not cases:
+        return []
+
+    present_names = {path.name for path in source_files}
+    missing_expected = sorted(
+        {
+            case.expected_document
+            for case in cases
+            if case.expected_document not in present_names
+        }
+    )
+    return [f"missing_expected_document:{name}" for name in missing_expected]
 
 
 def validate_manifest(output_dir: Path, manifest: dict[str, Any]) -> list[str]:
