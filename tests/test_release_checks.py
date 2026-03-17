@@ -6,7 +6,12 @@ import json
 from pathlib import Path
 
 from omnivorous.packer import pack_context
-from omnivorous.release_checks import RetrievalCase, evaluate_retrieval, validate_manifest
+from omnivorous.release_checks import (
+    RetrievalCase,
+    evaluate_retrieval,
+    validate_manifest,
+    validate_release_corpus,
+)
 
 
 def test_validate_manifest_accepts_valid_pack(fixtures_dir: Path, tmp_path: Path):
@@ -15,6 +20,35 @@ def test_validate_manifest_accepts_valid_pack(fixtures_dir: Path, tmp_path: Path
 
     manifest = json.loads((out / "manifest.json").read_text())
     assert validate_manifest(out, manifest) == []
+
+
+def test_validate_release_corpus_reports_missing_source(tmp_path: Path):
+    missing = tmp_path / "missing"
+    assert validate_release_corpus(missing) == [f"missing_source_dir:{missing}"]
+
+
+def test_validate_release_corpus_reports_missing_expected_documents(tmp_path: Path):
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "attention-transformer.md").write_text("# Attention\n\nTransformer architecture.")
+
+    errors = validate_release_corpus(
+        source,
+        [
+            RetrievalCase(
+                case_id="attention",
+                query="Where is the transformer architecture described?",
+                expected_document="attention-transformer.md",
+            ),
+            RetrievalCase(
+                case_id="missing",
+                query="Where is the service standard?",
+                expected_document="govuk-service-standard.html",
+            ),
+        ],
+    )
+
+    assert errors == ["missing_expected_document:govuk-service-standard.html"]
 
 
 def test_retrieval_eval_finds_expected_documents_and_chunks(tmp_path: Path):
