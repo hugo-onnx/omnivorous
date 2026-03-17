@@ -4,14 +4,70 @@ from __future__ import annotations
 
 import math
 import re
+import unicodedata
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 
-_WORD_RE = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9_-]*")
+_WORD_RE = re.compile(r"[^\W\d_][\w-]*", re.UNICODE)
 _ROMAN_NUMERAL_RE = re.compile(r"^[ivxlcdm]+$", re.IGNORECASE)
 _STOPWORDS = {
+    "a",
+    "an",
+    "al",
+    "article",
+    "articles",
+    "articulo",
+    "articulos",
+    "artículo",
+    "artículos",
     "the",
     "and",
+    "as",
+    "at",
+    "by",
+    "clause",
+    "clauses",
+    "commission",
+    "con",
+    "consejo",
+    "council",
+    "de",
+    "del",
+    "des",
+    "directive",
+    "directives",
+    "dos",
+    "europea",
+    "european",
+    "europeas",
+    "europeo",
+    "europeos",
+    "esta",
+    "este",
+    "estos",
+    "estas",
+    "ley",
+    "leyes",
+    "las",
+    "los",
+    "para",
+    "parlamento",
+    "parliament",
+    "por",
+    "present",
+    "presente",
+    "presentes",
+    "que",
+    "reglamento",
+    "reglamentos",
+    "regulation",
+    "regulations",
+    "una",
+    "uno",
+    "unos",
+    "unas",
+    "union",
+    "unión",
     "for",
     "with",
     "that",
@@ -118,8 +174,9 @@ class Relationship:
 
 def tokenize(text: str) -> list[str]:
     """Return normalized content words from text."""
+    normalized = unicodedata.normalize("NFKC", text).lower()
     tokens: list[str] = []
-    for word in _WORD_RE.findall(text.lower()):
+    for word in _WORD_RE.findall(normalized):
         if len(word) < 3 or word.isdigit() or word in _STOPWORDS:
             continue
         if _ROMAN_NUMERAL_RE.fullmatch(word):
