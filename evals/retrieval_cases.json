@@ -1,0 +1,33 @@
+[
+  {
+    "id": "attention-transformer",
+    "query": "Which paper introduces the Transformer architecture based only on attention mechanisms?",
+    "expected_document": "attention-is-all-you-need.pdf",
+    "top_k": 3
+  },
+  {
+    "id": "service-standard",
+    "query": "What are the points in the UK service standard for public services?",
+    "expected_document": "govuk-service-standard.html",
+    "expected_chunk_heading_contains": "Service Standard",
+    "top_k": 3
+  },
+  {
+    "id": "http-semantics",
+    "query": "Which RFC defines HTTP semantics and common protocol terminology?",
+    "expected_document": "rfc9110.txt",
+    "top_k": 3
+  },
+  {
+    "id": "procurement-risk-management",
+    "query": "What does the AI procurement clauses document require for a risk management system before delivery?",
+    "expected_document": "eu-ai-procurement-clauses.docx",
+    "top_k": 3
+  },
+  {
+    "id": "http-caching",
+    "query": "Where are Cache-Control directives and ETag validation rules described?",
+    "expected_document": "mdn-http-caching.html",
+    "top_k": 3
+  }
+]
