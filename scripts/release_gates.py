@@ -47,6 +47,11 @@ def main() -> int:
         help="Optional cache directory for embedding model files.",
     )
     parser.add_argument(
+        "--embedding-cache-dir",
+        type=Path,
+        help="Optional cache directory for semantic vectors.",
+    )
+    parser.add_argument(
         "--keep-output",
         action="store_true",
         help="Preserve temporary output directories for inspection.",
@@ -88,7 +93,7 @@ def main() -> int:
 
         if args.retrieval_cases:
             cases = load_retrieval_cases(args.retrieval_cases)
-            results = evaluate_retrieval(heading_manifest, cases)
+            results = evaluate_retrieval(heading_manifest, cases, output_dir=heading_pack)
             for result in results:
                 status = "PASS" if result.passed else "FAIL"
                 print(
@@ -112,6 +117,7 @@ def main() -> int:
                 enable_semantic=True,
                 semantic_offline=True,
                 embedding_model=args.embedding_model,
+                embedding_cache_dir=args.embedding_cache_dir,
                 embedding_model_cache_dir=args.embedding_model_cache_dir,
                 chunk_size=80,
             )
@@ -150,6 +156,7 @@ def _run_pack(
     enable_semantic: bool = False,
     semantic_offline: bool = False,
     embedding_model: str | None = None,
+    embedding_cache_dir: Path | None = None,
     embedding_model_cache_dir: Path | None = None,
 ) -> dict[str, object]:
     start = time.perf_counter()
@@ -162,6 +169,7 @@ def _run_pack(
         enable_semantic=enable_semantic,
         semantic_offline=semantic_offline,
         embedding_model=embedding_model,
+        embedding_cache_dir=embedding_cache_dir,
         embedding_model_cache_dir=embedding_model_cache_dir,
     )
     elapsed = time.perf_counter() - start
