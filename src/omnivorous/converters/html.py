@@ -25,6 +25,8 @@ _REMOVE_ROLES = {"navigation", "search", "banner", "contentinfo"}
 # class substrings that indicate non-content elements
 _REMOVE_CLASS_KEYWORDS = {"sidebar", "breadcrumb", "breadcrumbs", "headerlink", "permalink"}
 _MIN_MEANINGFUL_SCOPE_CHARS = 200
+_LIST_HEADING_TAGS = {"h1", "h2", "h3", "h4", "h5", "h6"}
+_ORDERED_PREFIX_RE = re.compile(r"^\d+[.)]?\s+")
 
 
 def _normalize_quotes(text: str) -> str:
@@ -123,6 +125,55 @@ def _clean_soup(soup: BeautifulSoup) -> BeautifulSoup:
     return soup
 
 
+def _first_meaningful_child(tag: Tag) -> Tag | None:
+    for child in tag.children:
+        if isinstance(child, NavigableString) and not child.strip():
+            continue
+        if isinstance(child, Tag):
+            return child
+    return None
+
+
+def _promote_list_item_headings(soup: BeautifulSoup, scope: Tag | BeautifulSoup) -> None:
+    """Flatten list items that are really repeated sections with nested headings."""
+    for list_tag in list(scope.find_all(["ol", "ul"])):
+        items = [item for item in list_tag.find_all("li", recursive=False)]
+        if len(items) < 2:
+            continue
+
+        heading_items: list[tuple[Tag, Tag]] = []
+        for item in items:
+            first_child = _first_meaningful_child(item)
+            if first_child is None or first_child.name not in _LIST_HEADING_TAGS:
+                heading_items = []
+                break
+            heading_items.append((item, first_child))
+
+        if not heading_items:
+            continue
+
+        container = soup.new_tag("div")
+        for index, (item, heading) in enumerate(heading_items, 1):
+            section = soup.new_tag("section")
+            promoted_heading = soup.new_tag(heading.name)
+
+            heading_text = " ".join(heading.stripped_strings)
+            if list_tag.name == "ol" and not _ORDERED_PREFIX_RE.match(heading_text):
+                heading_text = f"{index}. {heading_text}"
+            promoted_heading.string = heading_text
+            section.append(promoted_heading)
+
+            heading.extract()
+            for child in list(item.contents):
+                if isinstance(child, NavigableString) and not child.strip():
+                    continue
+                section.append(child.extract() if isinstance(child, Tag) else child)
+
+            container.append(section)
+
+        list_tag.replace_with(container)
+
+
 class HtmlConverter(BaseConverter):
     @property
     def name(self) -> str:
@@ -145,6 +196,7 @@ class HtmlConverter(BaseConverter):
         _clean_soup(soup)
 
         scope = _select_scope(soup)
+        _promote_list_item_headings(soup, scope)
 
         # Replace <img> tags with markdown image placeholders
         image_count = 0
