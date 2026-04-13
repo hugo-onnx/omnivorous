@@ -1,20 +1,29 @@
-"""CLI commands for omnivorous."""
+"""CLI entrypoint for omnivorous."""
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
+import click
 import typer
-from rich.table import Table
+from typer.core import TyperCommand
 
-from omnivorous.output import console, get_progress, print_error, print_info, print_success, unique_output_dir
+from omnivorous.output import get_progress, print_error, print_info, print_success, unique_output_dir
 
 app = typer.Typer(
     name="omni",
-    help="Convert documents into agent-ready Markdown context.",
-    no_args_is_help=True,
+    help="Generate agent-ready Markdown context packs from documents.",
 )
+
+
+class HelpOnEmptyCommand(TyperCommand):
+    """Return help with exit code 0 when the root command receives no arguments."""
+
+    def parse_args(self, ctx: click.Context, args: list[str]) -> list[str]:
+        if not args and self.no_args_is_help and not ctx.resilient_parsing:
+            click.echo(ctx.get_help(), color=ctx.color)
+            ctx.exit()
+        return super().parse_args(ctx, args)
 
 
 def _apply_encoding(encoding: str) -> None:
@@ -55,211 +64,22 @@ def _apply_mode(mode: str) -> None:
         raise typer.Exit(1)
 
 
-@app.command()
-def convert(
-    file: Path = typer.Argument(..., help="Path to the document to convert."),
-    output: Optional[Path] = typer.Option(None, "-o", "--output", help="Output file path."),
-    encoding: str = typer.Option("o200k_base", "--encoding", help="Tiktoken encoding name."),
-    mode: str = typer.Option(
-        "fast",
-        "--mode",
-        "-m",
-        help="PDF mode: fast (default) or scientific (LaTeX formulas).",
-    ),
+def _run_pack(
+    *,
+    folder: Path,
+    output: Path | None,
+    encoding: str,
+    agent: list[str] | None,
+    mode: str,
+    chunk_size: int,
+    chunk_by: str,
+    semantic: bool,
+    embedding_backend: str,
+    embedding_model: str | None,
+    embedding_cache_dir: Path | None,
+    embedding_model_cache_dir: Path | None,
+    semantic_offline: bool,
 ) -> None:
-    """Convert a single document to Markdown."""
-    from omnivorous.frontmatter import add_frontmatter
-    from omnivorous.registry import ensure_registry_loaded, get_converter
-
-    _apply_encoding(encoding)
-    _apply_mode(mode)
-    ensure_registry_loaded()
-
-    if not file.exists():
-        print_error(f"File not found: {file}")
-        raise typer.Exit(1)
-
-    ext = file.suffix.lower()
-    try:
-        converter = get_converter(ext)
-    except ValueError:
-        print_error(f"Unsupported format: {ext}")
-        raise typer.Exit(1)
-
-    with get_progress() as progress:
-        progress.add_task(f"Converting {file.name}...", total=None)
-        result = converter.convert(file)
-
-    md = add_frontmatter(result.content, result.metadata.to_dict())
-
-    if output:
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(md, encoding="utf-8")
-        print_success(f"Converted {file.name} → {output}")
-    else:
-        typer.echo(md)
-
-    print_info(f"{result.metadata.tokens_estimate} tokens")
-
-
-@app.command()
-def ingest(
-    folder: Path = typer.Argument(..., help="Folder containing documents to convert."),
-    output: Optional[Path] = typer.Option(None, "-o", "--output", help="Output directory."),
-    encoding: str = typer.Option("o200k_base", "--encoding", help="Tiktoken encoding name."),
-    mode: str = typer.Option(
-        "fast",
-        "--mode",
-        "-m",
-        help="PDF mode: fast (default) or scientific (LaTeX formulas).",
-    ),
-) -> None:
-    """Scan a folder and convert all supported documents to Markdown."""
-    from omnivorous.pipeline import discover_source_files, ingest_documents
-
-    _apply_encoding(encoding)
-    _apply_mode(mode)
-
-    if not folder.is_dir():
-        print_error(f"Not a directory: {folder}")
-        raise typer.Exit(1)
-
-    out_dir = unique_output_dir(output or Path("output"))
-    files = discover_source_files(folder)
-
-    if not files:
-        print_error(f"No supported files found in {folder}")
-        raise typer.Exit(1)
-
-    print_info(f"Found {len(files)} file(s)")
-
-    with get_progress() as progress:
-        task = progress.add_task("Converting...", total=len(files))
-        ingest_documents(
-            folder,
-            out_dir,
-            source_files=files,
-            on_document=lambda _source, _out, _result: progress.update(task, advance=1),
-        )
-
-    print_success(f"Converted {len(files)} file(s) → {out_dir}/")
-
-
-@app.command()
-def inspect(
-    file: Path = typer.Argument(..., help="File to inspect."),
-    encoding: str = typer.Option("o200k_base", "--encoding", help="Tiktoken encoding name."),
-    mode: str = typer.Option(
-        "fast",
-        "--mode",
-        "-m",
-        help="PDF mode: fast (default) or scientific (LaTeX formulas).",
-    ),
-) -> None:
-    """Display metadata for a document."""
-    from omnivorous.inspector import inspect_file
-
-    _apply_encoding(encoding)
-    _apply_mode(mode)
-
-    if not file.exists():
-        print_error(f"File not found: {file}")
-        raise typer.Exit(1)
-
-    with get_progress() as progress:
-        progress.add_task(f"Inspecting {file.name}...", total=None)
-        meta = inspect_file(file)
-
-    table = Table(title=f"Document: {file.name}")
-    table.add_column("Property", style="bold")
-    table.add_column("Value")
-
-    table.add_row("Source", meta.source)
-    table.add_row("Format", meta.format)
-    table.add_row("Title", meta.title)
-    table.add_row("Pages", str(meta.pages) if meta.pages else "N/A")
-    table.add_row("Headings", str(len(meta.headings)))
-    table.add_row("Tables", str(meta.tables))
-    table.add_row("Images", str(meta.images))
-    table.add_row("Tokens (est.)", str(meta.tokens_estimate))
-    table.add_row("Encoding", meta.encoding or "N/A")
-
-    console.print(table)
-
-    if meta.headings:
-        headings_table = Table(title="Headings")
-        headings_table.add_column("#", style="dim")
-        headings_table.add_column("Heading")
-        for i, h in enumerate(meta.headings, 1):
-            stripped = h.lstrip("#").strip()
-            level = len(h) - len(h.lstrip("#"))
-            indent = "  " * max(0, level - 1)
-            headings_table.add_row(str(i), f"{indent}{stripped}")
-        console.print(headings_table)
-
-
-@app.command()
-def pack(
-    folder: Path = typer.Argument(..., help="Folder containing documents to pack."),
-    output: Optional[Path] = typer.Option(
-        None, "-o", "--output", help="Output directory for agent context."
-    ),
-    encoding: str = typer.Option("o200k_base", "--encoding", help="Tiktoken encoding name."),
-    agent: Optional[list[str]] = typer.Option(
-        None,
-        "--agent",
-        "-a",
-        help="Target agent(s): claude, codex, cursor, copilot, antigravity, or all.",
-    ),
-    mode: str = typer.Option(
-        "fast",
-        "--mode",
-        "-m",
-        help="PDF mode: fast (default) or scientific (LaTeX formulas).",
-    ),
-    chunk_size: int = typer.Option(
-        500,
-        "--chunk-size",
-        min=1,
-        help="Target chunk size in tokens.",
-    ),
-    chunk_by: str = typer.Option(
-        "heading",
-        "--chunk-by",
-        help="Chunking strategy: heading or tokens.",
-    ),
-    semantic: bool = typer.Option(
-        False,
-        "--semantic",
-        help="Enable optional local-embedding relationships.",
-    ),
-    embedding_backend: str = typer.Option(
-        "fastembed",
-        "--embedding-backend",
-        help="Local embedding backend to use when --semantic is enabled.",
-    ),
-    embedding_model: Optional[str] = typer.Option(
-        None,
-        "--embedding-model",
-        help="Optional local embedding model name.",
-    ),
-    embedding_cache_dir: Optional[Path] = typer.Option(
-        None,
-        "--embedding-cache-dir",
-        help="Optional cache directory for local embeddings.",
-    ),
-    embedding_model_cache_dir: Optional[Path] = typer.Option(
-        None,
-        "--embedding-model-cache-dir",
-        help="Optional cache directory for local embedding model files.",
-    ),
-    semantic_offline: bool = typer.Option(
-        False,
-        "--semantic-offline",
-        help="Require semantic mode to use pre-cached local model files only.",
-    ),
-) -> None:
-    """Generate an agent context pack from a folder of documents."""
     from omnivorous.agents import resolve_agents
     from omnivorous.packer import pack_context
 
@@ -295,55 +115,112 @@ def pack(
                 embedding_model_cache_dir=embedding_model_cache_dir,
                 semantic_offline=semantic_offline,
             )
-        except ValueError as exc:
-            print_error(str(exc))
-            raise typer.Exit(1)
-        except ImportError as exc:
+        except (ImportError, ValueError) as exc:
             print_error(str(exc))
             raise typer.Exit(1)
 
     print_success(f"Agent context pack created in {out_dir}/")
-    for a in resolved:
-        print_info(f"  {a.file_path} — {a.display_name} instructions")
+    for resolved_agent in resolved:
+        print_info(f"  {resolved_agent.file_path} — {resolved_agent.display_name} instructions")
     print_info("  PROJECT_CONTEXT.md — documentation summary")
     print_info("  manifest.json — file manifest")
     print_info("  docs/chunks/ — chunked documents for focused reading")
     print_info("  docs/full/ — full converted documents")
 
 
-@app.command("warm-embeddings")
-def warm_embeddings(
-    model: str = typer.Option(
-        "BAAI/bge-small-en-v1.5",
-        "--model",
-        help="Embedding model to prefetch for semantic mode.",
-    ),
-    cache_dir: Optional[Path] = typer.Option(
+@app.command(cls=HelpOnEmptyCommand, no_args_is_help=True)
+def main(
+    folder: Path = typer.Argument(..., help="Folder containing documents to pack."),
+    output: Path | None = typer.Option(
         None,
-        "--cache-dir",
-        help="Optional cache directory for embedding model files.",
+        "-o",
+        "--output",
+        help="Output directory for agent context.",
+        rich_help_panel="Basic",
     ),
-    offline: bool = typer.Option(
+    agent: list[str] | None = typer.Option(
+        None,
+        "--agent",
+        "-a",
+        help="Target agent(s): claude, codex, cursor, copilot, antigravity, or all.",
+        rich_help_panel="Basic",
+    ),
+    mode: str = typer.Option(
+        "fast",
+        "--mode",
+        "-m",
+        help="PDF mode: fast (default) or scientific (LaTeX formulas).",
+        rich_help_panel="Basic",
+    ),
+    chunk_size: int = typer.Option(
+        500,
+        "--chunk-size",
+        min=1,
+        help="Target chunk size in tokens.",
+        rich_help_panel="Chunking",
+    ),
+    chunk_by: str = typer.Option(
+        "heading",
+        "--chunk-by",
+        help="Chunking strategy: heading or tokens.",
+        rich_help_panel="Chunking",
+    ),
+    semantic: bool = typer.Option(
         False,
-        "--offline",
-        help="Use only local files and fail if the model is not already cached.",
+        "--semantic",
+        help="Enable optional local-embedding relationships.",
+        rich_help_panel="Semantic",
+    ),
+    embedding_backend: str = typer.Option(
+        "fastembed",
+        "--embedding-backend",
+        help="Local embedding backend to use when --semantic is enabled.",
+        rich_help_panel="Semantic",
+    ),
+    embedding_model: str | None = typer.Option(
+        None,
+        "--embedding-model",
+        help="Optional local embedding model name.",
+        rich_help_panel="Semantic",
+    ),
+    embedding_cache_dir: Path | None = typer.Option(
+        None,
+        "--embedding-cache-dir",
+        help="Optional cache directory for local embeddings.",
+        rich_help_panel="Semantic",
+    ),
+    embedding_model_cache_dir: Path | None = typer.Option(
+        None,
+        "--embedding-model-cache-dir",
+        help="Optional cache directory for local embedding model files.",
+        rich_help_panel="Semantic",
+    ),
+    semantic_offline: bool = typer.Option(
+        False,
+        "--semantic-offline",
+        help="Require semantic mode to use pre-cached local model files only.",
+        rich_help_panel="Semantic",
+    ),
+    encoding: str = typer.Option(
+        "o200k_base",
+        "--encoding",
+        help="Tiktoken encoding name.",
+        rich_help_panel="Advanced",
     ),
 ) -> None:
-    """Prefetch the local embedding model used by semantic mode."""
-    from omnivorous.embeddings import default_embedding_model_cache_dir, warm_embedding_model
-
-    resolved_cache_dir = cache_dir or default_embedding_model_cache_dir()
-
-    with get_progress() as progress:
-        progress.add_task("Preparing embedding model...", total=None)
-        try:
-            warm_embedding_model(
-                cache_dir=resolved_cache_dir,
-                model_name=model,
-                local_files_only=offline,
-            )
-        except ImportError as exc:
-            print_error(str(exc))
-            raise typer.Exit(1)
-
-    print_success(f"Embedding model ready in {resolved_cache_dir}")
+    """Generate an agent context pack from a folder of documents."""
+    _run_pack(
+        folder=folder,
+        output=output,
+        encoding=encoding,
+        agent=agent,
+        mode=mode,
+        chunk_size=chunk_size,
+        chunk_by=chunk_by,
+        semantic=semantic,
+        embedding_backend=embedding_backend,
+        embedding_model=embedding_model,
+        embedding_cache_dir=embedding_cache_dir,
+        embedding_model_cache_dir=embedding_model_cache_dir,
+        semantic_offline=semantic_offline,
+    )
