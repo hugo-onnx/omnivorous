@@ -33,8 +33,8 @@ def _ensure_marker() -> None:
         import marker  # noqa: F401
     except ImportError:
         raise ImportError(
-            "marker-pdf is required for scientific mode. "
-            "Install it with: pip install omnivorous[scientific]"
+            "Scientific mode is unavailable because the omnivorous installation is incomplete. "
+            "Reinstall omnivorous and try again."
         )
 
 
