@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import click
 import pytest
 from typer.testing import CliRunner
 
@@ -14,22 +15,28 @@ def invoke(args: list[str]):
     return runner.invoke(app, args, prog_name="omni")
 
 
+def rendered_output(result) -> str:
+    return click.unstyle(result.output)
+
+
 def test_help_shows_single_command_interface():
     result = invoke(["--help"])
+    output = rendered_output(result)
 
     assert result.exit_code == 0
-    assert "Usage: omni [OPTIONS] FOLDER" in result.output
-    assert "Commands" not in result.output
-    assert "--agent" in result.output
-    assert "--chunk-size" in result.output
-    assert "--semantic" in result.output
+    assert "Usage: omni [OPTIONS] FOLDER" in output
+    assert "Commands" not in output
+    assert "--agent" in output
+    assert "--chunk-size" in output
+    assert "--semantic" in output
 
 
 def test_bare_invocation_shows_help():
     result = invoke([])
+    output = rendered_output(result)
 
     assert result.exit_code == 0
-    assert "Usage: omni [OPTIONS] FOLDER" in result.output
+    assert "Usage: omni [OPTIONS] FOLDER" in output
 
 
 def test_pack(fixtures_dir: Path, tmp_path: Path):
@@ -83,7 +90,7 @@ def test_non_directory_input(fixtures_dir: Path):
     result = invoke([str(fixtures_dir / "notes.txt")])
 
     assert result.exit_code == 1
-    assert "Not a directory" in result.output
+    assert "Not a directory" in rendered_output(result)
 
 
 @pytest.mark.parametrize(
@@ -178,8 +185,9 @@ def test_pack_with_semantic_mode_missing_backend(fixtures_dir: Path, tmp_path: P
         ),
     ):
         result = invoke([str(fixtures_dir), "-o", str(out), "--semantic"])
+    output = rendered_output(result)
 
     assert result.exit_code == 1
-    assert "uv sync --extra semantic" in result.output
-    assert "uv run --extra semantic omni <folder>" in result.output
-    assert "omnivorous[semantic]" in result.output
+    assert "uv sync --extra semantic" in output
+    assert "uv run --extra semantic omni <folder>" in output
+    assert "omnivorous[semantic]" in output
