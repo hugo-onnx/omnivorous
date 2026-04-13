@@ -22,7 +22,7 @@ jobs:
       - run: uv build
 
   package-smoke:
-    name: Package Smoke (${{ matrix.os }} / ${{ matrix.artifact }})
+    name: Package Smoke (${{ matrix.os }} / ${{ matrix.installer }} / ${{ matrix.artifact }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -30,18 +30,37 @@ jobs:
         include:
           - os: ubuntu-latest
             python-version: "3.13"
+            installer: pip
             artifact: wheel
             artifact-glob: dist/*.whl
           - os: ubuntu-latest
             python-version: "3.13"
+            installer: pip
             artifact: sdist
             artifact-glob: dist/*.tar.gz
           - os: macos-latest
             python-version: "3.13"
+            installer: pip
             artifact: wheel
             artifact-glob: dist/*.whl
           - os: windows-latest
             python-version: "3.13"
+            installer: pip
+            artifact: wheel
+            artifact-glob: dist/*.whl
+          - os: ubuntu-latest
+            python-version: "3.13"
+            installer: pipx
+            artifact: wheel
+            artifact-glob: dist/*.whl
+          - os: macos-latest
+            python-version: "3.13"
+            installer: pipx
+            artifact: wheel
+            artifact-glob: dist/*.whl
+          - os: windows-latest
+            python-version: "3.13"
+            installer: pipx
             artifact: wheel
             artifact-glob: dist/*.whl
     env:
@@ -53,4 +72,4 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - uses: astral-sh/setup-uv@v5
       - run: uv build
-      - run: python scripts/package_smoke.py --artifact-glob "${{ matrix.artifact-glob }}"
+      - run: python scripts/package_smoke.py --artifact-glob "${{ matrix.artifact-glob }}" --installer "${{ matrix.installer }}"
