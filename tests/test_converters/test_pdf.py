@@ -259,7 +259,10 @@ def test_marker_not_installed_error():
     try:
         set_pdf_engine("marker")
         with patch.dict("sys.modules", {"marker": None}):
-            with pytest.raises(ImportError, match="omnivorous\\[scientific\\]"):
+            with pytest.raises(
+                ImportError,
+                match="Scientific mode is unavailable because the omnivorous installation is incomplete.",
+            ):
                 from omnivorous.converters.pdf._marker import MarkerEngine
                 MarkerEngine().extract(Path("test.pdf"))
     finally:
