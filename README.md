@@ -36,17 +36,17 @@ pip install omnivorous[semantic]
 
 ```bash
 # Generate a full agent context pack (defaults to Claude Code)
-omni pack docs/ -o agent-context/
+omni docs/ -o agent-context/
 
 # Generate for a specific agent
-omni pack docs/ --agent codex
-omni pack docs/ --agent cursor
+omni docs/ --agent codex
+omni docs/ --agent cursor
 
 # Generate for multiple agents at once
-omni pack docs/ --agent claude --agent codex --agent copilot
+omni docs/ --agent claude --agent codex --agent copilot
 
 # Generate for all supported agents
-omni pack docs/ --agent all
+omni docs/ --agent all
 ```
 
 ## How It Works
@@ -66,12 +66,15 @@ omnivorous processes documents through a three-stage pipeline:
 - Markdown (`.md`, `.markdown`)
 - Plain text (`.txt`)
 
-## Commands
+## CLI
 
-All commands accept `--encoding` to select the tiktoken encoding used for token counting (default: `o200k_base`) and `--mode` / `-m` to select the PDF conversion engine.
+omnivorous exposes one CLI workflow:
 
-### `omni pack <folder>`
-Generate a full agent context pack with:
+```bash
+omni <folder> [options]
+```
+
+It generates a full agent context pack with:
 - Agent instruction file (varies by target agent)
 - `PROJECT_CONTEXT.md` — Documentation map, navigation hints, and cross-document bridges
 - `manifest.json` — Chunk-aware file manifest with hard-link and lexical relationship metadata
@@ -80,14 +83,17 @@ Generate a full agent context pack with:
 
 ```bash
 # Generate for a specific agent
-omni pack docs/ --agent codex
-omni pack docs/ --agent cursor
+omni docs/ --agent codex
+omni docs/ --agent cursor
 
 # Generate for multiple agents at once
-omni pack docs/ --agent claude --agent codex --agent copilot
+omni docs/ --agent claude --agent codex --agent copilot
 
 # Generate for all supported agents
-omni pack docs/ --agent all
+omni docs/ --agent all
+
+# Enable semantic relationships
+omni docs/ --semantic
 ```
 
 Options:
@@ -101,6 +107,8 @@ Options:
 - `--embedding-model`: Optional local embedding model name
 - `--embedding-cache-dir`: Optional cache directory for local embeddings
   By default, semantic mode uses a user-level cache outside the generated pack so cache files do not pollute the shipped artifact.
+- `--embedding-model-cache-dir`: Optional cache directory for local embedding model files
+- `--semantic-offline`: Require semantic mode to use only pre-cached local model files
 - `--encoding`: Tiktoken encoding name (default: `o200k_base`)
 
 #### Supported Agents
@@ -114,50 +122,6 @@ Options:
 | Google Antigravity | `antigravity` | `.agent/skills/omnivorous.md` |
 
 Use `--agent all` to generate instruction files for every supported agent at once.
-
-### `omni ingest <folder>`
-Scan a folder and convert all supported documents.
-
-```bash
-omni ingest docs/ -o output/
-```
-
-Options:
-- `-o, --output`: Output directory
-- `-m, --mode`: PDF conversion mode — `fast` (default) or `scientific`
-- `--encoding`: Tiktoken encoding name (default: `o200k_base`)
-
-### `omni convert <file>`
-Convert a single document to Markdown with YAML frontmatter.
-
-```bash
-omni convert document.pdf -o output.md
-
-# Use a different token encoding
-omni convert document.pdf --encoding cl100k_base -o output.md
-
-# Use scientific mode for LaTeX formulas
-omni convert paper.pdf --mode scientific -o output.md
-```
-
-Options:
-- `-o, --output`: Output file path
-- `-m, --mode`: PDF conversion mode — `fast` (default) or `scientific`
-- `--encoding`: Tiktoken encoding name (default: `o200k_base`)
-
-### `omni inspect <file>`
-Display document metadata: pages, headings, tables, token count, and encoding.
-
-```bash
-omni inspect document.pdf
-
-# Use a different token encoding
-omni inspect document.pdf --encoding cl100k_base
-```
-
-Options:
-- `-m, --mode`: PDF conversion mode — `fast` (default) or `scientific`
-- `--encoding`: Tiktoken encoding name (default: `o200k_base`)
 
 ## PDF Conversion Modes
 
