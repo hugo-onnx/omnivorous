@@ -8,19 +8,39 @@ omnivorous converts PDF, DOCX, HTML, Markdown, and plain text files into clean, 
 
 ## Install
 
+Requirements:
+- Python 3.10+
+
+Use `pip` if you are installing inside a virtual environment or project environment:
+
 ```bash
 pip install omnivorous
 ```
 
-Or with [uv](https://docs.astral.sh/uv/):
+Use `pipx` if you want a global CLI install:
+
+Install [pipx](https://pipx.pypa.io/stable/installation/) first, then run:
+
+```bash
+pipx install omnivorous
+```
+
+Use `uv tool` if you already use `uv` and want a global CLI install:
+
+Install [uv](https://docs.astral.sh/uv/) first, then run:
 
 ```bash
 uv tool install omnivorous
 ```
 
-This makes the `omni` command available globally.
+Verify the installation:
 
-Both install commands include scientific PDF extraction and local semantic relationships.
+```bash
+omni --help
+```
+
+All three install commands include scientific PDF extraction and local semantic relationships.
+The first `omni <folder> --semantic` run may download local model files, so it can take longer and requires network access unless the model is already cached.
 
 ## Quick Start
 
