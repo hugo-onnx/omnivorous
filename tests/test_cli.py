@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from omnivorous.cli import app
@@ -9,84 +10,32 @@ from omnivorous.cli import app
 runner = CliRunner()
 
 
-def test_help():
-    result = runner.invoke(app, ["--help"])
+def invoke(args: list[str]):
+    return runner.invoke(app, args, prog_name="omni")
+
+
+def test_help_shows_single_command_interface():
+    result = invoke(["--help"])
+
     assert result.exit_code == 0
-    assert "convert" in result.output
-    assert "ingest" in result.output
-    assert "inspect" in result.output
-    assert "pack" in result.output
+    assert "Usage: omni [OPTIONS] FOLDER" in result.output
+    assert "Commands" not in result.output
+    assert "--agent" in result.output
+    assert "--chunk-size" in result.output
+    assert "--semantic" in result.output
 
 
-def test_convert_txt(fixtures_dir: Path):
-    result = runner.invoke(app, ["convert", str(fixtures_dir / "notes.txt")])
+def test_bare_invocation_shows_help():
+    result = invoke([])
+
     assert result.exit_code == 0
-    assert "notes" in result.output
-
-
-def test_convert_markdown(fixtures_dir: Path):
-    result = runner.invoke(app, ["convert", str(fixtures_dir / "readme.md")])
-    assert result.exit_code == 0
-    assert "Sample Document" in result.output
-
-
-def test_convert_html(fixtures_dir: Path):
-    result = runner.invoke(app, ["convert", str(fixtures_dir / "web.html")])
-    assert result.exit_code == 0
-
-
-def test_convert_with_output(fixtures_dir: Path, tmp_path: Path):
-    out = tmp_path / "result.md"
-    result = runner.invoke(
-        app, ["convert", str(fixtures_dir / "readme.md"), "-o", str(out)]
-    )
-    assert result.exit_code == 0
-    assert out.exists()
-    content = out.read_text()
-    assert "---" in content  # frontmatter
-    assert "Sample Document" in content
-
-
-def test_convert_missing_file():
-    result = runner.invoke(app, ["convert", "nonexistent.pdf"])
-    assert result.exit_code == 1
-
-
-def test_convert_unsupported_format(tmp_path: Path):
-    f = tmp_path / "test.xyz"
-    f.write_text("content")
-    result = runner.invoke(app, ["convert", str(f)])
-    assert result.exit_code == 1
-
-
-def test_ingest(fixtures_dir: Path, tmp_path: Path):
-    out = tmp_path / "output"
-    result = runner.invoke(app, ["ingest", str(fixtures_dir), "-o", str(out)])
-    assert result.exit_code == 0
-    assert out.is_dir()
-    assert any(out.iterdir())
-
-
-def test_ingest_not_a_directory(tmp_path: Path):
-    f = tmp_path / "file.txt"
-    f.write_text("x")
-    result = runner.invoke(app, ["ingest", str(f)])
-    assert result.exit_code == 1
-
-
-def test_inspect_txt(fixtures_dir: Path):
-    result = runner.invoke(app, ["inspect", str(fixtures_dir / "notes.txt")])
-    assert result.exit_code == 0
-
-
-def test_inspect_missing():
-    result = runner.invoke(app, ["inspect", "nonexistent.txt"])
-    assert result.exit_code == 1
+    assert "Usage: omni [OPTIONS] FOLDER" in result.output
 
 
 def test_pack(fixtures_dir: Path, tmp_path: Path):
     out = tmp_path / "agent-ctx"
-    result = runner.invoke(app, ["pack", str(fixtures_dir), "-o", str(out)])
+    result = invoke([str(fixtures_dir), "-o", str(out)])
+
     assert result.exit_code == 0
     assert (out / "CLAUDE.md").exists()
     assert (out / "PROJECT_CONTEXT.md").exists()
@@ -97,7 +46,8 @@ def test_pack(fixtures_dir: Path, tmp_path: Path):
 
 def test_pack_with_agent_flag(fixtures_dir: Path, tmp_path: Path):
     out = tmp_path / "agent-ctx"
-    result = runner.invoke(app, ["pack", str(fixtures_dir), "-o", str(out), "--agent", "codex"])
+    result = invoke([str(fixtures_dir), "-o", str(out), "--agent", "codex"])
+
     assert result.exit_code == 0
     assert (out / "AGENTS.md").exists()
     assert not (out / "CLAUDE.md").exists()
@@ -105,9 +55,8 @@ def test_pack_with_agent_flag(fixtures_dir: Path, tmp_path: Path):
 
 def test_pack_with_multiple_agents(fixtures_dir: Path, tmp_path: Path):
     out = tmp_path / "agent-ctx"
-    result = runner.invoke(
-        app, ["pack", str(fixtures_dir), "-o", str(out), "--agent", "claude", "--agent", "codex"]
-    )
+    result = invoke([str(fixtures_dir), "-o", str(out), "--agent", "claude", "--agent", "codex"])
+
     assert result.exit_code == 0
     assert (out / "CLAUDE.md").exists()
     assert (out / "AGENTS.md").exists()
@@ -115,7 +64,8 @@ def test_pack_with_multiple_agents(fixtures_dir: Path, tmp_path: Path):
 
 def test_pack_with_all_agents(fixtures_dir: Path, tmp_path: Path):
     out = tmp_path / "agent-ctx"
-    result = runner.invoke(app, ["pack", str(fixtures_dir), "-o", str(out), "--agent", "all"])
+    result = invoke([str(fixtures_dir), "-o", str(out), "--agent", "all"])
+
     assert result.exit_code == 0
     assert (out / "CLAUDE.md").exists()
     assert (out / "AGENTS.md").exists()
@@ -124,38 +74,40 @@ def test_pack_with_all_agents(fixtures_dir: Path, tmp_path: Path):
 
 def test_pack_with_invalid_agent(fixtures_dir: Path, tmp_path: Path):
     out = tmp_path / "agent-ctx"
-    result = runner.invoke(app, ["pack", str(fixtures_dir), "-o", str(out), "--agent", "invalid"])
+    result = invoke([str(fixtures_dir), "-o", str(out), "--agent", "invalid"])
+
     assert result.exit_code == 1
 
 
-def test_ingest_preserves_subdirectory_structure(tmp_path: Path):
-    source = tmp_path / "source"
-    (source / "ch1").mkdir(parents=True)
-    (source / "ch2").mkdir(parents=True)
-    (source / "ch1" / "intro.txt").write_text("Chapter 1 intro")
-    (source / "ch2" / "intro.txt").write_text("Chapter 2 intro")
+def test_non_directory_input(fixtures_dir: Path):
+    result = invoke([str(fixtures_dir / "notes.txt")])
 
-    out = tmp_path / "output"
-    result = runner.invoke(app, ["ingest", str(source), "-o", str(out)])
-    assert result.exit_code == 0
-    assert (out / "ch1" / "intro.md").exists()
-    assert (out / "ch2" / "intro.md").exists()
+    assert result.exit_code == 1
+    assert "Not a directory" in result.output
 
 
-def test_ingest_auto_increments_existing_output(fixtures_dir: Path, tmp_path: Path):
-    out = tmp_path / "output"
-    out.mkdir()
-    result = runner.invoke(app, ["ingest", str(fixtures_dir), "-o", str(out)])
-    assert result.exit_code == 0
-    incremented = tmp_path / "output-1"
-    assert incremented.is_dir()
-    assert any(incremented.iterdir())
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["pack", "docs"],
+        ["convert", "document.pdf"],
+        ["ingest", "docs"],
+        ["inspect", "document.pdf"],
+        ["warm-embeddings"],
+    ],
+)
+def test_removed_legacy_invocations_fail(args: list[str]):
+    result = invoke(args)
+
+    assert result.exit_code != 0
 
 
 def test_pack_auto_increments_existing_output(fixtures_dir: Path, tmp_path: Path):
     out = tmp_path / "agent-context"
     out.mkdir()
-    result = runner.invoke(app, ["pack", str(fixtures_dir), "-o", str(out)])
+
+    result = invoke([str(fixtures_dir), "-o", str(out)])
+
     assert result.exit_code == 0
     incremented = tmp_path / "agent-context-1"
     assert incremented.is_dir()
@@ -163,47 +115,32 @@ def test_pack_auto_increments_existing_output(fixtures_dir: Path, tmp_path: Path
     assert (incremented / "docs" / "chunks").is_dir()
 
 
-def test_ingest_disambiguates_same_stem(tmp_path: Path):
-    source = tmp_path / "source"
-    source.mkdir()
-    (source / "readme.md").write_text("# Hello")
-    (source / "readme.txt").write_text("Hello")
+def test_pack_with_mode_fast(fixtures_dir: Path):
+    result = invoke([str(fixtures_dir), "--mode", "fast"])
 
-    out = tmp_path / "output"
-    result = runner.invoke(app, ["ingest", str(source), "-o", str(out)])
-    assert result.exit_code == 0
-    assert (out / "readme_md.md").exists()
-    assert (out / "readme_txt.md").exists()
-    assert not (out / "readme.md").exists()
-
-
-def test_convert_with_mode_fast(fixtures_dir: Path):
-    result = runner.invoke(app, ["convert", str(fixtures_dir / "notes.txt"), "--mode", "fast"])
     assert result.exit_code == 0
 
 
-def test_convert_with_invalid_mode(fixtures_dir: Path):
-    result = runner.invoke(app, ["convert", str(fixtures_dir / "notes.txt"), "--mode", "invalid"])
+def test_pack_with_invalid_mode(fixtures_dir: Path):
+    result = invoke([str(fixtures_dir), "--mode", "invalid"])
+
     assert result.exit_code == 1
 
 
-def test_convert_with_scientific_mode_no_marker(fixtures_dir: Path):
+def test_pack_with_scientific_mode_no_marker(fixtures_dir: Path):
     """Scientific mode should fail gracefully when marker-pdf is not installed."""
     from unittest.mock import patch
 
     with patch.dict("sys.modules", {"marker": None}):
-        result = runner.invoke(
-            app, ["convert", str(fixtures_dir / "notes.txt"), "--mode", "scientific"]
-        )
+        result = invoke([str(fixtures_dir), "--mode", "scientific"])
+
     assert result.exit_code == 1
 
 
 def test_pack_with_chunk_options(fixtures_dir: Path, tmp_path: Path):
     out = tmp_path / "agent-ctx"
-    result = runner.invoke(
-        app,
+    result = invoke(
         [
-            "pack",
             str(fixtures_dir),
             "-o",
             str(out),
@@ -211,8 +148,9 @@ def test_pack_with_chunk_options(fixtures_dir: Path, tmp_path: Path):
             "40",
             "--chunk-by",
             "tokens",
-        ],
+        ]
     )
+
     assert result.exit_code == 0
     manifest = (out / "manifest.json").read_text()
     assert '"chunk_strategy": "tokens"' in manifest
@@ -221,10 +159,8 @@ def test_pack_with_chunk_options(fixtures_dir: Path, tmp_path: Path):
 
 def test_pack_with_invalid_chunk_strategy(fixtures_dir: Path, tmp_path: Path):
     out = tmp_path / "agent-ctx"
-    result = runner.invoke(
-        app,
-        ["pack", str(fixtures_dir), "-o", str(out), "--chunk-by", "invalid"],
-    )
+    result = invoke([str(fixtures_dir), "-o", str(out), "--chunk-by", "invalid"])
+
     assert result.exit_code == 1
 
 
@@ -237,35 +173,13 @@ def test_pack_with_semantic_mode_missing_backend(fixtures_dir: Path, tmp_path: P
         side_effect=ImportError(
             "Semantic mode requires local embedding support. "
             "Use `uv sync --extra semantic` or run once with "
-            "`uv run --extra semantic omni pack ...`. "
+            "`uv run --extra semantic omni <folder> ...`. "
             "With pip, install `omnivorous[semantic]`."
         ),
     ):
-        result = runner.invoke(app, ["pack", str(fixtures_dir), "-o", str(out), "--semantic"])
+        result = invoke([str(fixtures_dir), "-o", str(out), "--semantic"])
+
     assert result.exit_code == 1
     assert "uv sync --extra semantic" in result.output
-    assert "uv run --extra semantic omni pack" in result.output
+    assert "uv run --extra semantic omni <folder>" in result.output
     assert "omnivorous[semantic]" in result.output
-
-
-def test_warm_embeddings_command(tmp_path: Path):
-    from unittest.mock import patch
-
-    cache_dir = tmp_path / "embedding-models"
-
-    with patch("omnivorous.embeddings.warm_embedding_model", return_value=cache_dir) as warm:
-        result = runner.invoke(
-            app,
-            [
-                "warm-embeddings",
-                "--cache-dir",
-                str(cache_dir),
-                "--model",
-                "BAAI/bge-small-en-v1.5",
-                "--offline",
-            ],
-        )
-
-    assert result.exit_code == 0
-    warm.assert_called_once()
-    assert "Embedding model ready" in result.output
