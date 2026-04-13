@@ -20,7 +20,7 @@ class EmbeddingBackend(Protocol):
 
 
 class FastEmbedBackend:
-    """Lazy wrapper around fastembed so semantic mode stays optional."""
+    """Lazy wrapper around fastembed so semantic mode stays opt-in at runtime."""
 
     def __init__(
         self,
@@ -33,10 +33,8 @@ class FastEmbedBackend:
             from fastembed import TextEmbedding
         except ImportError as exc:  # pragma: no cover - exercised via integration path
             raise ImportError(
-                "Semantic mode requires local embedding support. "
-                "Use `uv sync --extra semantic` or run once with "
-                "`uv run --extra semantic omni <folder> ...`. "
-                "With pip, install `omnivorous[semantic]`."
+                "Semantic mode is unavailable because the omnivorous installation is incomplete. "
+                "Reinstall omnivorous and try again."
             ) from exc
 
         try:
