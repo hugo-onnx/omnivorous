@@ -140,8 +140,10 @@ def test_pack_with_scientific_mode_no_marker(fixtures_dir: Path):
 
     with patch.dict("sys.modules", {"marker": None}):
         result = invoke([str(fixtures_dir), "--mode", "scientific"])
+    output = rendered_output(result)
 
     assert result.exit_code == 1
+    assert "Scientific mode is unavailable because the omnivorous installation is incomplete." in output
 
 
 def test_pack_with_chunk_options(fixtures_dir: Path, tmp_path: Path):
@@ -178,16 +180,13 @@ def test_pack_with_semantic_mode_missing_backend(fixtures_dir: Path, tmp_path: P
     with patch(
         "omnivorous.embeddings.LocalEmbeddingService._resolve_backend",
         side_effect=ImportError(
-            "Semantic mode requires local embedding support. "
-            "Use `uv sync --extra semantic` or run once with "
-            "`uv run --extra semantic omni <folder> ...`. "
-            "With pip, install `omnivorous[semantic]`."
+            "Semantic mode is unavailable because the omnivorous installation is incomplete. "
+            "Reinstall omnivorous and try again."
         ),
     ):
         result = invoke([str(fixtures_dir), "-o", str(out), "--semantic"])
     output = rendered_output(result)
 
     assert result.exit_code == 1
-    assert "uv sync --extra semantic" in output
-    assert "uv run --extra semantic omni <folder>" in output
-    assert "omnivorous[semantic]" in output
+    assert "Semantic mode is unavailable because the omnivorous installation is incomplete." in output
+    assert "Reinstall omnivorous and try again." in output
