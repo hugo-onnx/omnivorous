@@ -52,8 +52,8 @@ def _apply_mode(mode: str) -> None:
             import marker  # noqa: F401
         except ImportError:
             print_error(
-                "Scientific mode requires marker-pdf. "
-                "Install with: pip install omnivorous[scientific]"
+                "Scientific mode is unavailable because the omnivorous installation is incomplete. "
+                "Reinstall omnivorous and try again."
             )
             raise typer.Exit(1)
 
