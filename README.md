@@ -19,7 +19,7 @@ pip install omnivorous
 
 Use `pipx` if you want a global CLI install:
 
-Install [pipx](https://pipx.pypa.io/stable/installation/) first, then run:
+Install [pipx](https://pipx.pypa.io/stable/) first, then run:
 
 ```bash
 pipx install omnivorous
