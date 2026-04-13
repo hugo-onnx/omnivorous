@@ -35,7 +35,7 @@ class FastEmbedBackend:
             raise ImportError(
                 "Semantic mode requires local embedding support. "
                 "Use `uv sync --extra semantic` or run once with "
-                "`uv run --extra semantic omni pack ...`. "
+                "`uv run --extra semantic omni <folder> ...`. "
                 "With pip, install `omnivorous[semantic]`."
             ) from exc
 
@@ -49,7 +49,10 @@ class FastEmbedBackend:
             message = str(exc)
             if "Could not load model" not in message:
                 raise
-            offline_hint = "Run `omni warm-embeddings` first to prefetch the model cache."
+            offline_hint = (
+                "Run `omni <folder> --semantic` once with network access "
+                "to populate the model cache."
+            )
             if local_files_only:
                 raise ImportError(
                     "Semantic mode is configured for offline execution but the embedding model "
@@ -230,24 +233,6 @@ def resolve_embedding_local_files_only(local_files_only: bool | None = None) -> 
         return local_files_only
     value = os.environ.get("OMNIVOROUS_EMBEDDING_LOCAL_FILES_ONLY", "")
     return value.lower() in {"1", "true", "yes", "on"}
-
-
-def warm_embedding_model(
-    *,
-    cache_dir: Path | None = None,
-    model_name: str | None = None,
-    local_files_only: bool | None = None,
-) -> Path:
-    """Ensure the local embedding model is present in the cache directory."""
-    resolved_cache_dir = cache_dir or default_embedding_model_cache_dir()
-    resolved_cache_dir.mkdir(parents=True, exist_ok=True)
-
-    FastEmbedBackend(
-        model_name=model_name,
-        cache_dir=resolved_cache_dir,
-        local_files_only=resolve_embedding_local_files_only(local_files_only),
-    )
-    return resolved_cache_dir
 
 
 def _ensure_writable_cache_dir(path: Path, suffix: str) -> Path:
