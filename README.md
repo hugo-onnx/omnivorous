@@ -20,17 +20,7 @@ uv tool install omnivorous
 
 This makes the `omni` command available globally.
 
-For scientific documents with LaTeX formula extraction:
-
-```bash
-pip install omnivorous[scientific]
-```
-
-For optional local-embedding relationships without external APIs:
-
-```bash
-pip install omnivorous[semantic]
-```
+Both install commands include scientific PDF extraction and local semantic relationships.
 
 ## Quick Start
 
@@ -131,12 +121,6 @@ omnivorous supports two PDF conversion engines, selected via the `--mode` / `-m`
 |------|----------|-------------|
 | `fast` (default) | General documents — accurate layout, tables, ligature repair, header/footer removal | No |
 | `scientific` | Research papers — LaTeX formula reconstruction (`$...$`, `$$...$$`), advanced layout analysis | Yes (lightweight, not a VLM) |
-
-The `scientific` mode requires the optional `[scientific]` extra:
-
-```bash
-pip install omnivorous[scientific]
-```
 
 ## Token Encoding
 
