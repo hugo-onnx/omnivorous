@@ -1642,8 +1642,11 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },
+    { name = "fastembed", version = "0.7.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.13'" },
+    { name = "fastembed", version = "0.7.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.13'" },
     { name = "markdownify" },
     { name = "marker-pdf" },
+    { name = "onnxruntime" },
     { name = "pymupdf" },
     { name = "pymupdf4llm" },
     { name = "pypdf" },
@@ -1660,23 +1663,14 @@ dev = [
     { name = "pytest-cov" },
     { name = "ruff" },
 ]
-scientific = [
-    { name = "marker-pdf" },
-]
-semantic = [
-    { name = "fastembed", version = "0.7.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.13'" },
-    { name = "fastembed", version = "0.7.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.13'" },
-    { name = "onnxruntime" },
-]
 
 [package.metadata]
 requires-dist = [
     { name = "beautifulsoup4", specifier = ">=4.12,<5.0" },
-    { name = "fastembed", marker = "extra == 'semantic'" },
+    { name = "fastembed" },
     { name = "markdownify", specifier = ">=0.11,<1.0" },
-    { name = "marker-pdf", specifier = ">=0.2.17" },
-    { name = "marker-pdf", marker = "extra == 'scientific'", specifier = ">=1.0,<2.0" },
-    { name = "onnxruntime", marker = "extra == 'semantic'" },
+    { name = "marker-pdf", specifier = ">=1.0,<2.0" },
+    { name = "onnxruntime" },
     { name = "pymupdf", specifier = ">=1.24,<2.0" },
     { name = "pymupdf4llm", specifier = ">=0.0.10,<1.0" },
     { name = "pypdf", specifier = ">=4.0,<6.0" },
@@ -1689,7 +1683,7 @@ requires-dist = [
     { name = "tiktoken", specifier = ">=0.5,<1.0" },
     { name = "typer", specifier = ">=0.9,<1.0" },
 ]
-provides-extras = ["dev", "scientific", "semantic"]
+provides-extras = ["dev"]
 
 [[package]]
 name = "onnxruntime"
