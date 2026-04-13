@@ -59,6 +59,14 @@ def main() -> int:
 
         _run([python, "-m", "pip", "install", "--upgrade", "pip"])
         _run([python, "-m", "pip", "install", artifact])
+        _run(
+            [
+                python,
+                "-c",
+                "import fastembed, marker, onnxruntime; "
+                "print('bundled scientific and semantic dependencies are importable')",
+            ]
+        )
         omni = _venv_omni(venv_dir)
         _run([omni, "--help"])
         _run([omni, fixture_dir, "-o", output_dir])
