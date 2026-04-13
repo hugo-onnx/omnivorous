@@ -44,15 +44,15 @@ def main() -> int:
 
     repo_root = Path(__file__).resolve().parent.parent
     artifact = _resolve_artifact(args.artifact_glob, repo_root)
-    fixture = repo_root / "tests" / "fixtures" / "notes.txt"
+    fixture_dir = repo_root / "tests" / "fixtures"
 
-    if not fixture.exists():
-        raise FileNotFoundError(f"Fixture not found: {fixture}")
+    if not fixture_dir.exists():
+        raise FileNotFoundError(f"Fixture directory not found: {fixture_dir}")
 
     with tempfile.TemporaryDirectory(prefix="omnivorous-package-smoke-") as tmp_dir:
         temp_root = Path(tmp_dir)
         venv_dir = temp_root / "venv"
-        output_path = temp_root / "converted.md"
+        output_dir = temp_root / "agent-context"
 
         venv.EnvBuilder(with_pip=True).create(venv_dir)
         python = _venv_python(venv_dir)
@@ -61,11 +61,18 @@ def main() -> int:
         _run([python, "-m", "pip", "install", artifact])
         omni = _venv_omni(venv_dir)
         _run([omni, "--help"])
-        _run([omni, "convert", fixture, "-o", output_path])
+        _run([omni, fixture_dir, "-o", output_dir])
 
-        content = output_path.read_text(encoding="utf-8")
-        if "---" not in content or "This is a plain text document." not in content:
-            raise RuntimeError("Converted smoke output did not contain the expected content")
+        expected_paths = [
+            output_dir / "CLAUDE.md",
+            output_dir / "PROJECT_CONTEXT.md",
+            output_dir / "manifest.json",
+            output_dir / "docs" / "chunks",
+            output_dir / "docs" / "full",
+        ]
+        missing = [path for path in expected_paths if not path.exists()]
+        if missing:
+            raise RuntimeError(f"Pack smoke output was missing expected files: {missing}")
 
     print(f"Package smoke passed for {artifact.name}")
     return 0
