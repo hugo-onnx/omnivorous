@@ -2,7 +2,7 @@
 
 Engines:
 - ``pymupdf`` (default): Fast extraction via pymupdf4llm, no ML.
-- ``marker``: Scientific mode with LaTeX formula reconstruction (requires ``[scientific]`` extra).
+- ``marker``: Scientific mode with LaTeX formula reconstruction.
 """
 
 from __future__ import annotations
