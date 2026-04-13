@@ -4,17 +4,14 @@ from __future__ import annotations
 
 import os
 from contextlib import ExitStack
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Iterator, Sequence
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from omnivorous.converters.pdf import get_pdf_engine, set_pdf_engine
-from omnivorous.frontmatter import add_frontmatter
 from omnivorous.models import ConvertResult
 from omnivorous.registry import ensure_registry_loaded, get_converter, supported_extensions
 from omnivorous.tokens import get_encoding_name, set_encoding
-
-IngestCallback = Callable[[Path, Path, ConvertResult], None]
 
 
 def discover_source_files(source_dir: Path) -> list[Path]:
@@ -220,26 +217,3 @@ def iter_converted_documents(
         return
 
     yield from _iter_threaded_documents(source_files, worker_count)
-
-
-def ingest_documents(
-    source_dir: Path,
-    output_dir: Path,
-    source_files: Sequence[Path] | None = None,
-    on_document: IngestCallback | None = None,
-) -> list[Path]:
-    """Convert a source tree to markdown files under `output_dir`."""
-    files = list(source_files) if source_files is not None else discover_source_files(source_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    output_map = resolve_output_paths(files, source_dir)
-
-    for _, source_file, result in iter_converted_documents(files):
-        md = add_frontmatter(result.content, result.metadata.to_dict())
-        out_rel = output_map[source_file]
-        out_path = output_dir / out_rel
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(md, encoding="utf-8")
-        if on_document is not None:
-            on_document(source_file, out_path, result)
-
-    return [output_dir / output_map[file_path] for file_path in files]
