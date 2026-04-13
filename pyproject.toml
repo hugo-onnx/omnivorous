@@ -33,7 +33,9 @@ dependencies = [
     "markdownify>=0.11,<1.0",
     "tiktoken>=0.5,<1.0",
     "pyyaml>=6.0,<7.0",
-    "marker-pdf>=0.2.17",
+    "fastembed",
+    "marker-pdf>=1.0,<2.0",
+    "onnxruntime",
 ]
 
 [project.urls]
@@ -43,8 +45,6 @@ Issues = "https://github.com/hugo-onnx/omnivorous/issues"
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "pytest-cov>=4.0", "ruff>=0.1"]
-scientific = ["marker-pdf>=1.0,<2.0"]
-semantic = ["fastembed", "onnxruntime"]
 
 [project.scripts]
 omni = "omnivorous.cli:app"
