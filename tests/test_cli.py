@@ -29,6 +29,7 @@ def test_help_shows_single_command_interface():
     assert "--agent" in output
     assert "--chunk-size" in output
     assert "--semantic" in output
+    assert "--encoding" not in output
 
 
 def test_bare_invocation_shows_help():
