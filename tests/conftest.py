@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import math
 import re
 from pathlib import Path
@@ -11,6 +12,21 @@ import pytest
 import omnivorous.embeddings as embeddings_module
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
+_FAKE_EMBEDDING_STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "after",
+    "for",
+    "in",
+    "is",
+    "of",
+    "on",
+    "the",
+    "to",
+    "when",
+    "with",
+}
 
 
 @pytest.fixture
@@ -22,14 +38,35 @@ class _DefaultFakeEmbeddingBackend:
     def embed(self, texts: list[str]) -> list[list[float]]:
         vectors: list[list[float]] = []
         for text in texts:
-            buckets = [0.0] * 16
-            for token in re.findall(r"[a-z0-9]+", text.lower()):
-                buckets[hash(token) % len(buckets)] += 1.0
+            buckets = [0.0] * 256
+            normalized_tokens = {
+                token
+                for raw_token in re.findall(r"[a-z0-9]+", text.lower())
+                if (token := _normalize_fake_embedding_token(raw_token))
+            }
+            for token in normalized_tokens:
+                digest = hashlib.sha256(token.encode("utf-8")).digest()
+                index = int.from_bytes(digest[:2], "big") % len(buckets)
+                buckets[index] += 1.0
             norm = math.sqrt(sum(value * value for value in buckets))
             if norm:
                 buckets = [value / norm for value in buckets]
             vectors.append(buckets)
         return vectors
+
+
+def _normalize_fake_embedding_token(token: str) -> str:
+    if len(token) < 3 or token in _FAKE_EMBEDDING_STOPWORDS:
+        return ""
+    if token.endswith("ies") and len(token) > 4:
+        token = f"{token[:-3]}y"
+    elif token.endswith("ing") and len(token) > 5:
+        token = token[:-3]
+    elif token.endswith("ed") and len(token) > 4:
+        token = token[:-2]
+    elif token.endswith("s") and len(token) > 4 and not token.endswith("ss"):
+        token = token[:-1]
+    return token
 
 
 @pytest.fixture(autouse=True)
