@@ -1,13 +1,17 @@
-"""Tests for optional local embeddings."""
+"""Tests for always-on local embeddings."""
 
+import hashlib
+import sys
 from pathlib import Path
 
+import omnivorous.embeddings as embeddings_module
 from omnivorous.embeddings import (
     EmbeddingNode,
+    FIXED_EMBEDDING_MODEL,
     LocalEmbeddingService,
     default_embedding_cache_dir,
     default_embedding_model_cache_dir,
-    resolve_embedding_local_files_only,
+    default_embedding_root_dir,
 )
 
 
@@ -15,8 +19,7 @@ class FakeBackend:
     def __init__(self):
         self.calls = 0
 
-    def embed(self, texts: list[str], *, model_name: str | None = None) -> list[list[float]]:
-        del model_name
+    def embed(self, texts: list[str]) -> list[list[float]]:
         self.calls += 1
         vectors: list[list[float]] = []
         for text in texts:
@@ -37,8 +40,7 @@ class FakeFloat32:
 
 
 class FakeNumpyLikeBackend:
-    def embed(self, texts: list[str], *, model_name: str | None = None) -> list[list[FakeFloat32]]:
-        del model_name
+    def embed(self, texts: list[str]) -> list[list[FakeFloat32]]:
         return [[FakeFloat32(1.0), FakeFloat32(0.0)] for _ in texts]
 
 
@@ -46,7 +48,6 @@ def test_local_embedding_service_caches_vectors(tmp_path: Path):
     backend = FakeBackend()
     service = LocalEmbeddingService(
         cache_dir=tmp_path,
-        backend_name="fake",
         backend=backend,
     )
     nodes = [
@@ -66,7 +67,6 @@ def test_local_embedding_service_respects_groups(tmp_path: Path):
     backend = FakeBackend()
     service = LocalEmbeddingService(
         cache_dir=tmp_path,
-        backend_name="fake",
         backend=backend,
     )
     nodes = [
@@ -88,7 +88,6 @@ def test_local_embedding_service_respects_candidate_groups(tmp_path: Path):
     backend = FakeBackend()
     service = LocalEmbeddingService(
         cache_dir=tmp_path,
-        backend_name="fake",
         backend=backend,
     )
     nodes = [
@@ -112,7 +111,6 @@ def test_local_embedding_service_respects_candidate_groups(tmp_path: Path):
 def test_local_embedding_service_normalizes_json_unsafe_scalars(tmp_path: Path):
     service = LocalEmbeddingService(
         cache_dir=tmp_path,
-        backend_name="fake",
         backend=FakeNumpyLikeBackend(),
     )
     nodes = [
@@ -127,16 +125,24 @@ def test_local_embedding_service_normalizes_json_unsafe_scalars(tmp_path: Path):
     assert cache_files
 
 
-def test_default_embedding_model_cache_dir_uses_env(monkeypatch, tmp_path: Path):
-    monkeypatch.setenv("OMNIVOROUS_EMBEDDING_CACHE_DIR", str(tmp_path / "vectors"))
-    monkeypatch.setenv("OMNIVOROUS_EMBEDDING_MODEL_CACHE_DIR", str(tmp_path / "models"))
+def test_default_embedding_cache_dirs_use_platform_root(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg-cache"))
+    monkeypatch.setattr(embeddings_module, "default_embedding_root_dir", default_embedding_root_dir)
 
-    assert default_embedding_cache_dir() == tmp_path / "vectors"
-    assert default_embedding_model_cache_dir() == tmp_path / "models"
+    if sys.platform == "darwin":
+        expected_root = Path.home() / "Library" / "Caches" / "omnivorous"
+    else:
+        expected_root = tmp_path / "xdg-cache" / "omnivorous"
+
+    assert default_embedding_root_dir() == expected_root
+    assert default_embedding_cache_dir() == expected_root / "vectors"
+    assert default_embedding_model_cache_dir() == expected_root / "models"
 
 
-def test_resolve_embedding_local_files_only_uses_env(monkeypatch):
-    monkeypatch.setenv("OMNIVOROUS_EMBEDDING_LOCAL_FILES_ONLY", "true")
+def test_local_embedding_service_cache_keys_include_fixed_model(tmp_path: Path):
+    service = LocalEmbeddingService(cache_dir=tmp_path, backend=FakeBackend())
 
-    assert resolve_embedding_local_files_only() is True
-    assert resolve_embedding_local_files_only(False) is False
+    path = service._cache_path("Alpha document")
+    expected = hashlib.sha256(f"{FIXED_EMBEDDING_MODEL}:Alpha document".encode("utf-8")).hexdigest()
+
+    assert path == tmp_path / f"{expected}.json"
