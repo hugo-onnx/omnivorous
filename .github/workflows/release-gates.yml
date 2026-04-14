@@ -14,16 +14,14 @@ jobs:
     timeout-minutes: 90
     env:
       UV_PYTHON: "3.13"
-      OMNIVOROUS_EMBEDDING_CACHE_DIR: ${{ github.workspace }}/.cache/omnivorous/vectors
-      OMNIVOROUS_EMBEDDING_MODEL_CACHE_DIR: ${{ github.workspace }}/.cache/omnivorous/models
-      OMNIVOROUS_EMBEDDING_LOCAL_FILES_ONLY: "1"
+      XDG_CACHE_HOME: ${{ github.workspace }}/.cache
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
       - uses: actions/cache@v4
         with:
-          path: ${{ env.OMNIVOROUS_EMBEDDING_MODEL_CACHE_DIR }}
-          key: fastembed-${{ runner.os }}-bge-small-en-v1.5
+          path: ${{ github.workspace }}/.cache/omnivorous/models
+          key: fastembed-${{ runner.os }}-intfloat-multilingual-e5-large
       - run: uv sync --extra dev
-      - run: OMNIVOROUS_EMBEDDING_LOCAL_FILES_ONLY=0 uv run omni tests/fixtures --semantic --embedding-cache-dir "${OMNIVOROUS_EMBEDDING_CACHE_DIR}" --embedding-model-cache-dir "${OMNIVOROUS_EMBEDDING_MODEL_CACHE_DIR}" -o "${RUNNER_TEMP}/omnivorous-semantic-warmup"
-      - run: uv run python scripts/release_gates.py --source evals/release_corpus --retrieval-cases evals/retrieval_cases.json --semantic-smoke-source tests/fixtures --embedding-cache-dir "${OMNIVOROUS_EMBEDDING_CACHE_DIR}" --embedding-model-cache-dir "${OMNIVOROUS_EMBEDDING_MODEL_CACHE_DIR}"
+      - run: uv run omni tests/fixtures -o "${RUNNER_TEMP}/omnivorous-semantic-warmup"
+      - run: uv run python scripts/release_gates.py --source evals/release_corpus --retrieval-cases evals/retrieval_cases.json
