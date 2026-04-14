@@ -61,12 +61,6 @@ def _run_pack(
     mode: str,
     chunk_size: int,
     chunk_by: str,
-    semantic: bool,
-    embedding_backend: str,
-    embedding_model: str | None,
-    embedding_cache_dir: Path | None,
-    embedding_model_cache_dir: Path | None,
-    semantic_offline: bool,
 ) -> None:
     from omnivorous.agents import resolve_agents
     from omnivorous.packer import pack_context
@@ -95,12 +89,6 @@ def _run_pack(
                 agents=agent_names,
                 chunk_size=chunk_size,
                 chunk_by=chunk_by,
-                enable_semantic=semantic,
-                embedding_backend=embedding_backend,
-                embedding_model=embedding_model,
-                embedding_cache_dir=embedding_cache_dir,
-                embedding_model_cache_dir=embedding_model_cache_dir,
-                semantic_offline=semantic_offline,
             )
         except (ImportError, ValueError) as exc:
             print_error(str(exc))
@@ -152,42 +140,6 @@ def main(
         help="Chunking strategy: heading or tokens.",
         rich_help_panel="Chunking",
     ),
-    semantic: bool = typer.Option(
-        False,
-        "--semantic",
-        help="Enable optional local-embedding relationships.",
-        rich_help_panel="Semantic",
-    ),
-    embedding_backend: str = typer.Option(
-        "fastembed",
-        "--embedding-backend",
-        help="Local embedding backend to use when --semantic is enabled.",
-        rich_help_panel="Semantic",
-    ),
-    embedding_model: str | None = typer.Option(
-        None,
-        "--embedding-model",
-        help="Optional local embedding model name.",
-        rich_help_panel="Semantic",
-    ),
-    embedding_cache_dir: Path | None = typer.Option(
-        None,
-        "--embedding-cache-dir",
-        help="Optional cache directory for local embeddings.",
-        rich_help_panel="Semantic",
-    ),
-    embedding_model_cache_dir: Path | None = typer.Option(
-        None,
-        "--embedding-model-cache-dir",
-        help="Optional cache directory for local embedding model files.",
-        rich_help_panel="Semantic",
-    ),
-    semantic_offline: bool = typer.Option(
-        False,
-        "--semantic-offline",
-        help="Require semantic mode to use pre-cached local model files only.",
-        rich_help_panel="Semantic",
-    ),
 ) -> None:
     """Generate an agent context pack from a folder of documents."""
     _run_pack(
@@ -197,10 +149,4 @@ def main(
         mode=mode,
         chunk_size=chunk_size,
         chunk_by=chunk_by,
-        semantic=semantic,
-        embedding_backend=embedding_backend,
-        embedding_model=embedding_model,
-        embedding_cache_dir=embedding_cache_dir,
-        embedding_model_cache_dir=embedding_model_cache_dir,
-        semantic_offline=semantic_offline,
     )
