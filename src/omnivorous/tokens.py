@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import tiktoken
 
+DEFAULT_ENCODING = "o200k_base"
 SUPPORTED_ENCODINGS: set[str] = {"cl100k_base", "o200k_base"}
 
-_encoding_name: str = "o200k_base"
+_encoding_name: str = DEFAULT_ENCODING
 _encoding: tiktoken.Encoding | None = None
 
 
@@ -20,6 +21,11 @@ def set_encoding(name: str) -> None:
         )
     _encoding_name = name
     _encoding = None  # reset cache
+
+
+def reset_encoding() -> None:
+    """Reset token counting to the built-in default encoding."""
+    set_encoding(DEFAULT_ENCODING)
 
 
 def get_encoding_name() -> str:
