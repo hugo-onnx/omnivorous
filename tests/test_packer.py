@@ -8,6 +8,7 @@ from pathlib import Path
 from omnivorous.embeddings import LocalEmbeddingService
 from omnivorous.models import DocumentMetadata
 from omnivorous.agents import AGENT_TARGETS
+from omnivorous.tokens import set_encoding
 from omnivorous.packer import (
     _filter_document_relationships,
     generate_agent_instructions,
@@ -116,6 +117,26 @@ def test_pack_context(fixtures_dir: Path, tmp_path: Path):
     assert manifest["total_tokens"] > 0
     assert manifest["total_chunks"] > 0
     assert "manifest.json" in manifest["output_files"]
+
+
+def test_pack_context_uses_standard_default_encoding(tmp_path: Path):
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "notes.txt").write_text("Simple source text for token estimation.")
+
+    set_encoding("cl100k_base")
+
+    out = tmp_path / "out"
+    pack_context(source, out)
+
+    manifest = json.loads((out / "manifest.json").read_text())
+    document = manifest["documents"][0]
+    assert document["encoding"] == "o200k_base"
+
+    full_doc = out / document["full_path"]
+    chunk_doc = out / document["chunks"][0]["path"]
+    assert "encoding: o200k_base" in full_doc.read_text()
+    assert "encoding: o200k_base" in chunk_doc.read_text()
 
 
 def test_pack_context_disambiguates_stem_collisions(tmp_path: Path):
