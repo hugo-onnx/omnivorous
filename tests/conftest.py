@@ -1,8 +1,14 @@
 """Shared test fixtures."""
 
+from __future__ import annotations
+
+import math
+import re
 from pathlib import Path
 
 import pytest
+
+import omnivorous.embeddings as embeddings_module
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
@@ -10,6 +16,37 @@ FIXTURES_DIR = Path(__file__).parent / "fixtures"
 @pytest.fixture
 def fixtures_dir() -> Path:
     return FIXTURES_DIR
+
+
+class _DefaultFakeEmbeddingBackend:
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        vectors: list[list[float]] = []
+        for text in texts:
+            buckets = [0.0] * 16
+            for token in re.findall(r"[a-z0-9]+", text.lower()):
+                buckets[hash(token) % len(buckets)] += 1.0
+            norm = math.sqrt(sum(value * value for value in buckets))
+            if norm:
+                buckets = [value / norm for value in buckets]
+            vectors.append(buckets)
+        return vectors
+
+
+@pytest.fixture(autouse=True)
+def fake_embedding_runtime(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    cache_root = tmp_path / ".cache" / "omnivorous"
+
+    def _fake_resolve_backend(self):
+        if self._backend is None:
+            self._backend = _DefaultFakeEmbeddingBackend()
+        return self._backend
+
+    monkeypatch.setattr(embeddings_module, "default_embedding_root_dir", lambda: cache_root)
+    monkeypatch.setattr(
+        embeddings_module.LocalEmbeddingService,
+        "_resolve_backend",
+        _fake_resolve_backend,
+    )
 
 
 @pytest.fixture
