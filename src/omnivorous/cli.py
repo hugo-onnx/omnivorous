@@ -26,17 +26,6 @@ class HelpOnEmptyCommand(TyperCommand):
         return super().parse_args(ctx, args)
 
 
-def _apply_encoding(encoding: str) -> None:
-    """Validate and set the tiktoken encoding, exiting on error."""
-    from omnivorous.tokens import set_encoding
-
-    try:
-        set_encoding(encoding)
-    except ValueError as exc:
-        print_error(str(exc))
-        raise typer.Exit(1)
-
-
 def _apply_mode(mode: str) -> None:
     """Validate and set the PDF engine based on conversion mode."""
     from omnivorous.converters.pdf import set_pdf_engine
@@ -68,7 +57,6 @@ def _run_pack(
     *,
     folder: Path,
     output: Path | None,
-    encoding: str,
     agent: list[str] | None,
     mode: str,
     chunk_size: int,
@@ -83,7 +71,6 @@ def _run_pack(
     from omnivorous.agents import resolve_agents
     from omnivorous.packer import pack_context
 
-    _apply_encoding(encoding)
     _apply_mode(mode)
 
     if not folder.is_dir():
@@ -201,18 +188,11 @@ def main(
         help="Require semantic mode to use pre-cached local model files only.",
         rich_help_panel="Semantic",
     ),
-    encoding: str = typer.Option(
-        "o200k_base",
-        "--encoding",
-        help="Tiktoken encoding name.",
-        rich_help_panel="Advanced",
-    ),
 ) -> None:
     """Generate an agent context pack from a folder of documents."""
     _run_pack(
         folder=folder,
         output=output,
-        encoding=encoding,
         agent=agent,
         mode=mode,
         chunk_size=chunk_size,
