@@ -40,7 +40,7 @@ omni --help
 ```
 
 All three install commands include scientific PDF extraction and local semantic relationships.
-The first `omni <folder> --semantic` run may download local model files, so it can take longer and requires network access unless the model is already cached.
+The first `omni <folder>` run may download the local multilingual embedding model, so it can take longer and requires network access unless the model is already cached.
 
 ## Quick Start
 
@@ -60,7 +60,7 @@ omnivorous processes documents through a three-stage pipeline:
 1. **Convert** — Each format has a dedicated converter that produces clean Markdown. PDFs use pymupdf4llm for accurate layout extraction with ligature repair and header/footer removal (or marker-pdf in `--mode scientific` for LaTeX formula reconstruction); HTML gets nav, script, and boilerplate stripping; DOCX preserves structure while dropping styling.
    When processing folders, omnivorous converts files in parallel by default where it is safe to do so.
 2. **Extract metadata** — Page count, headings, tables, and token count are recorded as YAML frontmatter.
-3. **Pack** — Agent instruction files, a project context map, a chunk-aware manifest, chunked docs, full converted docs, and deterministic cross-document relationship hints are assembled into a ready-to-use context pack. Relationships combine explicit references like file paths, IDs, and section numbers with lexical similarity by default, and can optionally add local embeddings without relying on third-party LLM APIs.
+3. **Pack** — Agent instruction files, a project context map, a chunk-aware manifest, chunked docs, full converted docs, and deterministic cross-document relationship hints are assembled into a ready-to-use context pack. Relationships combine explicit references like file paths, IDs, and section numbers with lexical similarity, and always add local embeddings without relying on third-party LLM APIs.
 
 ## Supported Formats
 
@@ -81,24 +81,11 @@ omni <folder> [options]
 It generates a full agent context pack with:
 - Agent instruction file (varies by target agent)
 - `PROJECT_CONTEXT.md` — Documentation map, navigation hints, and cross-document bridges
-- `manifest.json` — Chunk-aware file manifest with hard-link and lexical relationship metadata
+- `manifest.json` — Chunk-aware file manifest with hard-link, lexical, and semantic relationship metadata
 - `docs/chunks/` — Focused context for agents
 - `docs/full/` — Full converted documents for fallback reading
 
-```bash
-# Generate for a specific agent
-omni docs/ --agent codex
-omni docs/ --agent cursor
-
-# Generate for multiple agents at once
-omni docs/ --agent claude --agent codex --agent copilot
-
-# Generate for all supported agents
-omni docs/ --agent all
-
-# Enable semantic relationships
-omni docs/ --semantic
-```
+Semantic relationships are always generated. The first pack run may download the fixed local embedding model once, then reuse it from the user cache on later runs.
 
 Options:
 - `-o, --output`: Output directory for agent context
@@ -106,13 +93,6 @@ Options:
 - `-m, --mode`: PDF conversion mode — `fast` (default) or `scientific` (LaTeX formula extraction)
 - `--chunk-size`: Target chunk size in tokens (default: 500)
 - `--chunk-by`: Strategy — `heading` or `tokens` (default: heading)
-- `--semantic`: Enable optional local-embedding relationships
-- `--embedding-backend`: Local embedding backend (default: `fastembed`)
-- `--embedding-model`: Optional local embedding model name
-- `--embedding-cache-dir`: Optional cache directory for local embeddings
-  By default, semantic mode uses a user-level cache outside the generated pack so cache files do not pollute the shipped artifact.
-- `--embedding-model-cache-dir`: Optional cache directory for local embedding model files
-- `--semantic-offline`: Require semantic mode to use only pre-cached local model files
 
 #### Supported Agents
 
