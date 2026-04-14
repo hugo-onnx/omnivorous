@@ -28,7 +28,6 @@ def test_help_shows_single_command_interface():
     assert "Commands" not in output
     assert "--agent" in output
     assert "--chunk-size" in output
-    assert "--semantic" in output
     assert "--encoding" not in output
 
 
@@ -174,20 +173,21 @@ def test_pack_with_invalid_chunk_strategy(fixtures_dir: Path, tmp_path: Path):
     assert result.exit_code == 1
 
 
-def test_pack_with_semantic_mode_missing_backend(fixtures_dir: Path, tmp_path: Path):
+def test_pack_fails_when_semantic_model_cannot_load(fixtures_dir: Path, tmp_path: Path):
     from unittest.mock import patch
 
     out = tmp_path / "agent-ctx"
     with patch(
         "omnivorous.embeddings.LocalEmbeddingService._resolve_backend",
         side_effect=ImportError(
-            "Semantic mode is unavailable because the omnivorous installation is incomplete. "
-            "Reinstall omnivorous and try again."
+            "Omnivorous could not load its local semantic model. "
+            "The first successful `omni <folder>` run needs network access to download the model once; "
+            "later runs reuse the local cache."
         ),
     ):
-        result = invoke([str(fixtures_dir), "-o", str(out), "--semantic"])
+        result = invoke([str(fixtures_dir), "-o", str(out)])
     output = rendered_output(result)
 
     assert result.exit_code == 1
-    assert "Semantic mode is unavailable because the omnivorous installation is incomplete." in output
-    assert "Reinstall omnivorous and try again." in output
+    assert "Omnivorous could not load its local semantic model." in output
+    assert "first successful" in output
