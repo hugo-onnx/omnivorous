@@ -39,7 +39,7 @@ from omnivorous.relationships import (
     tokenize,
 )
 from omnivorous.registry import ensure_registry_loaded
-from omnivorous.tokens import count_tokens
+from omnivorous.tokens import count_tokens, reset_encoding
 
 _ATX_HEADING_RE = re.compile(r"^#{1,6}\s+(.+)$", re.MULTILINE)
 _SETEXT_HEADING_RE = re.compile(r"^(.+)\n([=-]{2,})\s*$", re.MULTILINE)
@@ -683,6 +683,7 @@ def pack_context(
 ) -> Path:
     """Orchestrate full pipeline: convert all docs and generate agent context pack."""
     ensure_registry_loaded()
+    reset_encoding()
 
     if chunk_size < 1:
         raise ValueError("chunk_size must be at least 1")
