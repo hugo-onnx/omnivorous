@@ -51,12 +51,6 @@ omni docs/ -o agent-context/
 # Generate for a specific agent
 omni docs/ --agent codex
 omni docs/ --agent cursor
-
-# Generate for multiple agents at once
-omni docs/ --agent claude --agent codex --agent copilot
-
-# Generate for all supported agents
-omni docs/ --agent all
 ```
 
 ## How It Works
@@ -109,7 +103,7 @@ omni docs/ --semantic
 Options:
 - `-o, --output`: Output directory for agent context
 - `-a, --agent`: Target agent(s) — can be specified multiple times (default: `claude`)
-- `-m, --mode`: PDF conversion mode — `fast` (default, pymupdf4llm) or `scientific` (marker-pdf with LaTeX formula extraction)
+- `-m, --mode`: PDF conversion mode — `fast` (default) or `scientific` (LaTeX formula extraction)
 - `--chunk-size`: Target chunk size in tokens (default: 500)
 - `--chunk-by`: Strategy — `heading` or `tokens` (default: heading)
 - `--semantic`: Enable optional local-embedding relationships
@@ -119,7 +113,6 @@ Options:
   By default, semantic mode uses a user-level cache outside the generated pack so cache files do not pollute the shipped artifact.
 - `--embedding-model-cache-dir`: Optional cache directory for local embedding model files
 - `--semantic-offline`: Require semantic mode to use only pre-cached local model files
-- `--encoding`: Tiktoken encoding name (default: `o200k_base`)
 
 #### Supported Agents
 
@@ -142,15 +135,13 @@ omnivorous supports two PDF conversion engines, selected via the `--mode` / `-m`
 | `fast` (default) | General documents — accurate layout, tables, ligature repair, header/footer removal | No |
 | `scientific` | Research papers — LaTeX formula reconstruction (`$...$`, `$$...$$`), advanced layout analysis | Yes (lightweight, not a VLM) |
 
-## Token Encoding
+## Token Estimates
 
-Token counts vary across models because each uses a different tokenizer. By default, omnivorous uses `o200k_base` (GPT-4o, o1, o3). You can switch to `cl100k_base` (GPT-4 / GPT-3.5) with the `--encoding` flag.
+omnivorous standardizes token estimates and chunking on `o200k_base` so packs stay consistent across supported agent targets.
 
-Supported encodings:
-- `o200k_base` — GPT-4o, o1, o3 (default)
-- `cl100k_base` — GPT-4, GPT-3.5
+These counts are estimates for chunking, manifests, and navigation metadata. They are not intended to match provider-specific billing or token counting exactly.
 
-The encoding name is recorded in each document's metadata so downstream tools know which tokenizer was used.
+The encoding name is still recorded in each document's metadata so downstream tools know which tokenizer was used.
 
 ## Development
 
