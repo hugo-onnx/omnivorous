@@ -14,8 +14,6 @@ from omnivorous.embeddings import (
     EmbeddingMatch,
     EmbeddingNode,
     LocalEmbeddingService,
-    default_embedding_cache_dir,
-    default_embedding_model_cache_dir,
 )
 from omnivorous.frontmatter import add_frontmatter
 from omnivorous.models import DocumentMetadata
@@ -637,7 +635,7 @@ def generate_manifest(
     *,
     chunk_by: str = "heading",
     chunk_size: int = 500,
-    relationship_strategy: str = "hybrid_reference_tfidf",
+    relationship_strategy: str = "hybrid_reference_tfidf_embedding",
 ) -> str:
     """Generate a manifest.json for the agent context pack."""
     documents = _coerce_document_entries(docs_metadata, original_sources)
@@ -673,13 +671,6 @@ def pack_context(
     *,
     chunk_size: int = 500,
     chunk_by: str = "heading",
-    enable_semantic: bool = False,
-    embedding_backend: str = "fastembed",
-    embedding_model: str | None = None,
-    embedding_cache_dir: Path | None = None,
-    embedding_model_cache_dir: Path | None = None,
-    semantic_offline: bool = False,
-    embedding_service: LocalEmbeddingService | None = None,
 ) -> Path:
     """Orchestrate full pipeline: convert all docs and generate agent context pack."""
     ensure_registry_loaded()
@@ -904,23 +895,15 @@ def pack_context(
         )
         for path in document_lookup
     }
+    semantic_service = LocalEmbeddingService()
     document_semantic_relationships: dict[str, list[EmbeddingMatch]] = {}
     chunk_semantic_relationships: dict[str, list[EmbeddingMatch]] = {}
-    relationship_strategy = "hybrid_reference_tfidf"
-    if enable_semantic:
-        semantic_service = embedding_service or LocalEmbeddingService(
-            cache_dir=embedding_cache_dir or default_embedding_cache_dir(),
-            backend_name=embedding_backend,
-            model_name=embedding_model,
-            model_cache_dir=embedding_model_cache_dir or default_embedding_model_cache_dir(),
-            local_files_only=semantic_offline,
-        )
-        document_semantic_relationships = semantic_service.build_relationships(
-            document_embedding_nodes,
-            limit=3,
-            min_score=0.35,
-        )
-        relationship_strategy = "hybrid_reference_tfidf_embedding"
+    relationship_strategy = "hybrid_reference_tfidf_embedding"
+    document_semantic_relationships = semantic_service.build_relationships(
+        document_embedding_nodes,
+        limit=3,
+        min_score=0.35,
+    )
     document_edges = _fuse_relationship_sets(
         list(document_lookup),
         document_relationships,
@@ -959,7 +942,7 @@ def pack_context(
         for path in chunk_lookup
     }
     semantic_candidate_groups = _semantic_candidate_groups(document_edges)
-    if enable_semantic and semantic_candidate_groups:
+    if semantic_candidate_groups:
         chunk_semantic_relationships = semantic_service.build_relationships(
             chunk_embedding_nodes,
             limit=3,
