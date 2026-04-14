@@ -1,4 +1,4 @@
-"""Optional local embeddings with a pluggable backend and on-disk cache."""
+"""Always-on local embeddings with persistent on-disk caches."""
 
 from __future__ import annotations
 
@@ -7,63 +7,51 @@ import json
 import math
 import os
 import sys
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
+
+FIXED_EMBEDDING_MODEL = "intfloat/multilingual-e5-large"
 
 
 class EmbeddingBackend(Protocol):
     """Backend protocol for local embedding providers."""
 
-    def embed(self, texts: list[str], *, model_name: str | None = None) -> list[list[float]]: ...
+    def embed(self, texts: list[str]) -> list[list[float]]: ...
 
 
 class FastEmbedBackend:
-    """Lazy wrapper around fastembed so semantic mode stays opt-in at runtime."""
+    """Lazy wrapper around fastembed for the fixed local embedding model."""
 
     def __init__(
         self,
-        model_name: str | None = None,
         *,
-        cache_dir: Path | None = None,
-        local_files_only: bool = False,
+        cache_dir: Path,
     ):
         try:
             from fastembed import TextEmbedding
         except ImportError as exc:  # pragma: no cover - exercised via integration path
             raise ImportError(
-                "Semantic mode is unavailable because the omnivorous installation is incomplete. "
+                "Semantic relationships are unavailable because the omnivorous installation is incomplete. "
                 "Reinstall omnivorous and try again."
             ) from exc
 
         try:
-            kwargs = {
-                "cache_dir": str(cache_dir) if cache_dir is not None else None,
-                "local_files_only": local_files_only,
-            }
-            self._embedder = TextEmbedding(model_name=model_name, **kwargs) if model_name else TextEmbedding(**kwargs)
+            self._embedder = TextEmbedding(
+                model_name=FIXED_EMBEDDING_MODEL,
+                cache_dir=str(cache_dir),
+            )
         except ValueError as exc:
             message = str(exc)
             if "Could not load model" not in message:
                 raise
-            offline_hint = (
-                "Run `omni <folder> --semantic` once with network access "
-                "to populate the model cache."
-            )
-            if local_files_only:
-                raise ImportError(
-                    "Semantic mode is configured for offline execution but the embedding model "
-                    "is not available in the local cache. "
-                    f"{offline_hint}"
-                ) from exc
             raise ImportError(
-                "Semantic mode could not load the local embedding model. "
-                f"{offline_hint}"
+                "Omnivorous could not load its local semantic model. "
+                "The first successful `omni <folder>` run needs network access to download the model once; "
+                "later runs reuse the local cache."
             ) from exc
 
-    def embed(self, texts: list[str], *, model_name: str | None = None) -> list[list[float]]:
-        del model_name
+    def embed(self, texts: list[str]) -> list[list[float]]:
         return [[float(value) for value in vector] for vector in self._embedder.embed(texts)]
 
 
@@ -90,21 +78,14 @@ class LocalEmbeddingService:
     def __init__(
         self,
         *,
-        cache_dir: Path,
-        backend_name: str = "fastembed",
-        model_name: str | None = None,
+        cache_dir: Path | None = None,
         model_cache_dir: Path | None = None,
-        local_files_only: bool | None = None,
         backend: EmbeddingBackend | None = None,
     ):
-        self.cache_dir = _ensure_writable_cache_dir(cache_dir, "vector-cache")
-        self.backend_name = backend_name
-        self.model_name = model_name
-        self.model_cache_dir = _ensure_writable_cache_dir(
-            model_cache_dir or (self.cache_dir / "models"),
-            "model-cache",
-        )
-        self.local_files_only = resolve_embedding_local_files_only(local_files_only)
+        resolved_cache_dir = cache_dir or default_embedding_cache_dir()
+        resolved_model_cache_dir = model_cache_dir or default_embedding_model_cache_dir()
+        self.cache_dir = _ensure_cache_dir(resolved_cache_dir, "vector cache")
+        self.model_cache_dir = _ensure_cache_dir(resolved_model_cache_dir, "model cache")
         self._backend = backend
 
     def build_relationships(
@@ -167,7 +148,7 @@ class LocalEmbeddingService:
 
         if missing_texts:
             backend = self._resolve_backend()
-            generated = backend.embed(missing_texts, model_name=self.model_name)
+            generated = backend.embed(missing_texts)
             for key, text, vector in zip(missing_keys, missing_texts, generated, strict=True):
                 normalized = [float(value) for value in vector]
                 cache_path = self._cache_path(text)
@@ -179,19 +160,13 @@ class LocalEmbeddingService:
     def _resolve_backend(self) -> EmbeddingBackend:
         if self._backend is not None:
             return self._backend
-        if self.backend_name != "fastembed":
-            raise ValueError(
-                f"Unsupported embedding backend: {self.backend_name!r}. Valid: fastembed"
-            )
         self._backend = FastEmbedBackend(
-            model_name=self.model_name,
             cache_dir=self.model_cache_dir,
-            local_files_only=self.local_files_only,
         )
         return self._backend
 
     def _cache_path(self, text: str) -> Path:
-        payload = f"{self.backend_name}:{self.model_name or 'default'}:{text}".encode("utf-8")
+        payload = f"{FIXED_EMBEDDING_MODEL}:{text}".encode("utf-8")
         digest = hashlib.sha256(payload).hexdigest()
         return self.cache_dir / f"{digest}.json"
 
@@ -208,9 +183,16 @@ def _cosine_similarity(left: list[float], right: list[float]) -> float:
 
 def default_embedding_cache_dir() -> Path:
     """Return a user-level cache directory for local embeddings."""
-    if configured := os.environ.get("OMNIVOROUS_EMBEDDING_CACHE_DIR"):
-        return Path(configured).expanduser()
+    return default_embedding_root_dir() / "vectors"
 
+
+def default_embedding_model_cache_dir() -> Path:
+    """Return the cache directory used for local embedding model files."""
+    return default_embedding_root_dir() / "models"
+
+
+def default_embedding_root_dir() -> Path:
+    """Return the persistent user-level cache root for semantic artifacts."""
     if sys.platform == "darwin":
         return Path.home() / "Library" / "Caches" / "omnivorous"
 
@@ -218,26 +200,12 @@ def default_embedding_cache_dir() -> Path:
     return cache_home / "omnivorous"
 
 
-def default_embedding_model_cache_dir() -> Path:
-    """Return the cache directory used for local embedding model files."""
-    if configured := os.environ.get("OMNIVOROUS_EMBEDDING_MODEL_CACHE_DIR"):
-        return Path(configured).expanduser()
-    return default_embedding_cache_dir() / "models"
-
-
-def resolve_embedding_local_files_only(local_files_only: bool | None = None) -> bool:
-    """Resolve whether embedding backends must use pre-cached local files only."""
-    if local_files_only is not None:
-        return local_files_only
-    value = os.environ.get("OMNIVOROUS_EMBEDDING_LOCAL_FILES_ONLY", "")
-    return value.lower() in {"1", "true", "yes", "on"}
-
-
-def _ensure_writable_cache_dir(path: Path, suffix: str) -> Path:
+def _ensure_cache_dir(path: Path, purpose: str) -> Path:
     try:
         path.mkdir(parents=True, exist_ok=True)
         return path
-    except PermissionError:
-        fallback = Path(tempfile.gettempdir()) / "omnivorous" / suffix
-        fallback.mkdir(parents=True, exist_ok=True)
-        return fallback
+    except OSError as exc:
+        raise ValueError(
+            f"Could not create the semantic {purpose} at {path}. "
+            "Omnivorous needs a writable persistent cache directory for local semantic relationships."
+        ) from exc
