@@ -135,14 +135,6 @@ omnivorous supports two PDF conversion engines, selected via the `--mode` / `-m`
 | `fast` (default) | General documents — accurate layout, tables, ligature repair, header/footer removal | No |
 | `scientific` | Research papers — LaTeX formula reconstruction (`$...$`, `$$...$$`), advanced layout analysis | Yes (lightweight, not a VLM) |
 
-## Token Estimates
-
-omnivorous standardizes token estimates and chunking on `o200k_base` so packs stay consistent across supported agent targets.
-
-These counts are estimates for chunking, manifests, and navigation metadata. They are not intended to match provider-specific billing or token counting exactly.
-
-The encoding name is still recorded in each document's metadata so downstream tools know which tokenizer was used.
-
 ## Development
 
 [uv](https://docs.astral.sh/uv/) is required for development.
