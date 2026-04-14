@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from omnivorous.embeddings import LocalEmbeddingService
 from omnivorous.models import DocumentMetadata
 from omnivorous.agents import AGENT_TARGETS
 from omnivorous.tokens import set_encoding
@@ -21,8 +20,7 @@ from omnivorous.packer import (
 
 
 class _FakeEmbeddingBackend:
-    def embed(self, texts: list[str], *, model_name: str | None = None) -> list[list[float]]:
-        del model_name
+    def embed(self, texts: list[str]) -> list[list[float]]:
         vectors: list[list[float]] = []
         for text in texts:
             lowered = text.lower()
@@ -34,8 +32,7 @@ class _FakeEmbeddingBackend:
 
 
 class _ModerateSemanticBackend:
-    def embed(self, texts: list[str], *, model_name: str | None = None) -> list[list[float]]:
-        del model_name
+    def embed(self, texts: list[str]) -> list[list[float]]:
         vectors: list[list[float]] = []
         for text in texts:
             lowered = text.lower()
@@ -49,8 +46,7 @@ class _ModerateSemanticBackend:
 
 
 class _GenericAnchorSemanticBackend:
-    def embed(self, texts: list[str], *, model_name: str | None = None) -> list[list[float]]:
-        del model_name
+    def embed(self, texts: list[str]) -> list[list[float]]:
         vectors: list[list[float]] = []
         for text in texts:
             lowered = text.lower()
@@ -76,6 +72,13 @@ def _meta(
     )
 
 
+def _patch_embedding_backend(monkeypatch, backend) -> None:
+    monkeypatch.setattr(
+        "omnivorous.embeddings.LocalEmbeddingService._resolve_backend",
+        lambda self: backend,
+    )
+
+
 def test_generate_claude_md():
     result = generate_claude_md([_meta("Doc A"), _meta("Doc B")])
     assert "# Project Context" in result
@@ -95,7 +98,7 @@ def test_generate_manifest():
     data = json.loads(result)
     assert data["version"] == "3.0"
     assert data["generator"] == "omnivorous"
-    assert data["relationship_strategy"] == "hybrid_reference_tfidf"
+    assert data["relationship_strategy"] == "hybrid_reference_tfidf_embedding"
     assert len(data["documents"]) == 1
     assert data["chunk_strategy"] == "heading"
     assert data["chunk_size"] == 500
@@ -363,18 +366,13 @@ def test_pack_context_excludes_low_signal_boilerplate_chunks_from_relationships(
     assert license_chunk["related_chunks"] == []
 
 
-def test_pack_context_can_add_semantic_relationships(tmp_path: Path):
+def test_pack_context_can_add_semantic_relationships(tmp_path: Path, monkeypatch):
     source = tmp_path / "source"
     source.mkdir()
     (source / "alpha.md").write_text("# Alpha Guide\n\nWidget recovery procedures.")
     (source / "beta.txt").write_text("Subsystem restoration notes.")
     (source / "hr.txt").write_text("Vacation handbook and onboarding.")
-
-    embedding_service = LocalEmbeddingService(
-        cache_dir=tmp_path / "embeddings-cache",
-        backend_name="fake",
-        backend=_FakeEmbeddingBackend(),
-    )
+    _patch_embedding_backend(monkeypatch, _FakeEmbeddingBackend())
 
     out = tmp_path / "agent-context"
     pack_context(
@@ -382,8 +380,6 @@ def test_pack_context_can_add_semantic_relationships(tmp_path: Path):
         out,
         chunk_size=20,
         chunk_by="tokens",
-        enable_semantic=True,
-        embedding_service=embedding_service,
     )
 
     manifest = json.loads((out / "manifest.json").read_text())
@@ -397,90 +393,24 @@ def test_pack_context_can_add_semantic_relationships(tmp_path: Path):
     assert not (out / ".omnivorous-cache").exists()
 
 
-def test_pack_context_uses_external_default_embedding_cache(
-    tmp_path: Path, monkeypatch
-):
+def test_pack_context_uses_user_cache_for_embeddings(tmp_path: Path, monkeypatch):
     source = tmp_path / "source"
     source.mkdir()
     (source / "alpha.md").write_text("# Alpha\n\nWidget recovery procedures.")
     (source / "beta.md").write_text("# Beta\n\nSubsystem restoration notes.")
-
-    recorded: dict[str, Path] = {}
-
-    class RecordingEmbeddingService:
-        def __init__(
-            self,
-            *,
-            cache_dir: Path,
-            backend_name: str = "fastembed",
-            model_name: str | None = None,
-            model_cache_dir: Path | None = None,
-            local_files_only: bool | None = None,
-            backend=None,
-        ):
-            del backend_name, model_name, model_cache_dir, local_files_only, backend
-            recorded["cache_dir"] = cache_dir
-
-        def build_relationships(self, nodes, **kwargs):
-            del nodes, kwargs
-            return {}
-
-    monkeypatch.setattr("omnivorous.packer.LocalEmbeddingService", RecordingEmbeddingService)
+    cache_root = tmp_path / "user-cache"
+    monkeypatch.setattr("omnivorous.embeddings.default_embedding_root_dir", lambda: cache_root)
 
     out = tmp_path / "agent-context"
-    pack_context(source, out, chunk_size=20, chunk_by="tokens", enable_semantic=True)
+    pack_context(source, out, chunk_size=20, chunk_by="tokens")
 
-    assert recorded["cache_dir"] != out / ".omnivorous-cache"
-    assert out not in recorded["cache_dir"].parents
+    assert (cache_root / "vectors").is_dir()
+    assert (cache_root / "models").is_dir()
+    assert out not in (cache_root / "vectors").parents
     assert not (out / ".omnivorous-cache").exists()
 
 
-def test_pack_context_passes_semantic_offline_configuration(tmp_path: Path, monkeypatch):
-    source = tmp_path / "source"
-    source.mkdir()
-    (source / "alpha.md").write_text("# Alpha\n\nWidget recovery procedures.")
-    (source / "beta.md").write_text("# Beta\n\nSubsystem restoration notes.")
-
-    recorded: dict[str, object] = {}
-
-    class RecordingEmbeddingService:
-        def __init__(
-            self,
-            *,
-            cache_dir: Path,
-            backend_name: str = "fastembed",
-            model_name: str | None = None,
-            model_cache_dir: Path | None = None,
-            local_files_only: bool | None = None,
-            backend=None,
-        ):
-            del cache_dir, backend_name, model_name, backend
-            recorded["model_cache_dir"] = model_cache_dir
-            recorded["local_files_only"] = local_files_only
-
-        def build_relationships(self, nodes, **kwargs):
-            del nodes, kwargs
-            return {}
-
-    monkeypatch.setattr("omnivorous.packer.LocalEmbeddingService", RecordingEmbeddingService)
-
-    out = tmp_path / "agent-context"
-    model_cache_dir = tmp_path / "model-cache"
-    pack_context(
-        source,
-        out,
-        chunk_size=20,
-        chunk_by="tokens",
-        enable_semantic=True,
-        semantic_offline=True,
-        embedding_model_cache_dir=model_cache_dir,
-    )
-
-    assert recorded["model_cache_dir"] == model_cache_dir
-    assert recorded["local_files_only"] is True
-
-
-def test_pack_context_filters_moderate_semantic_false_positives(tmp_path: Path):
+def test_pack_context_filters_moderate_semantic_false_positives(tmp_path: Path, monkeypatch):
     source = tmp_path / "source"
     source.mkdir()
     (source / "http-caching.md").write_text(
@@ -489,12 +419,7 @@ def test_pack_context_filters_moderate_semantic_false_positives(tmp_path: Path):
     (source / "tax-form.txt").write_text(
         "Tax return filing instructions and withholding details.\n"
     )
-
-    embedding_service = LocalEmbeddingService(
-        cache_dir=tmp_path / "embeddings-cache",
-        backend_name="moderate",
-        backend=_ModerateSemanticBackend(),
-    )
+    _patch_embedding_backend(monkeypatch, _ModerateSemanticBackend())
 
     out = tmp_path / "agent-context"
     pack_context(
@@ -502,8 +427,6 @@ def test_pack_context_filters_moderate_semantic_false_positives(tmp_path: Path):
         out,
         chunk_size=20,
         chunk_by="tokens",
-        enable_semantic=True,
-        embedding_service=embedding_service,
     )
 
     manifest = json.loads((out / "manifest.json").read_text())
@@ -511,7 +434,7 @@ def test_pack_context_filters_moderate_semantic_false_positives(tmp_path: Path):
     assert caching["related_documents"] == []
 
 
-def test_pack_context_ignores_generic_anchor_terms_for_semantic_edges(tmp_path: Path):
+def test_pack_context_ignores_generic_anchor_terms_for_semantic_edges(tmp_path: Path, monkeypatch):
     source = tmp_path / "source"
     source.mkdir()
     (source / "protocol.md").write_text(
@@ -520,12 +443,7 @@ def test_pack_context_ignores_generic_anchor_terms_for_semantic_edges(tmp_path: 
     (source / "cybersecurity.md").write_text(
         "# Cybersecurity Playbook\n\n## Abstract\n\nRisk assessment guidance.\n"
     )
-
-    embedding_service = LocalEmbeddingService(
-        cache_dir=tmp_path / "embeddings-cache",
-        backend_name="generic-anchor",
-        backend=_GenericAnchorSemanticBackend(),
-    )
+    _patch_embedding_backend(monkeypatch, _GenericAnchorSemanticBackend())
 
     out = tmp_path / "agent-context"
     pack_context(
@@ -533,8 +451,6 @@ def test_pack_context_ignores_generic_anchor_terms_for_semantic_edges(tmp_path: 
         out,
         chunk_size=20,
         chunk_by="tokens",
-        enable_semantic=True,
-        embedding_service=embedding_service,
     )
 
     manifest = json.loads((out / "manifest.json").read_text())
