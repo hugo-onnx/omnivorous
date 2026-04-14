@@ -33,26 +33,6 @@ def main() -> int:
         help="Optional retrieval evaluation cases JSON.",
     )
     parser.add_argument(
-        "--semantic-smoke-source",
-        type=Path,
-        help="Optional smaller corpus to pack with semantic mode enabled.",
-    )
-    parser.add_argument(
-        "--embedding-model",
-        default="BAAI/bge-small-en-v1.5",
-        help="Embedding model to use for semantic smoke validation.",
-    )
-    parser.add_argument(
-        "--embedding-model-cache-dir",
-        type=Path,
-        help="Optional cache directory for embedding model files.",
-    )
-    parser.add_argument(
-        "--embedding-cache-dir",
-        type=Path,
-        help="Optional cache directory for semantic vectors.",
-    )
-    parser.add_argument(
         "--keep-output",
         action="store_true",
         help="Preserve temporary output directories for inspection.",
@@ -72,7 +52,6 @@ def main() -> int:
 
     output_root = Path(tempfile.mkdtemp(prefix="omnivorous-release-gates-", dir="/tmp"))
     failures: list[str] = []
-    created_dirs = [output_root]
 
     try:
         heading_pack = output_root / "heading-pack"
@@ -115,29 +94,6 @@ def main() -> int:
                 if not result.passed
             )
 
-        if args.semantic_smoke_source:
-            semantic_pack = output_root / "semantic-pack"
-            created_dirs.append(semantic_pack)
-            semantic_manifest = _run_pack(
-                source_dir=args.semantic_smoke_source,
-                output_dir=semantic_pack,
-                chunk_by="tokens",
-                enable_semantic=True,
-                semantic_offline=True,
-                embedding_model=args.embedding_model,
-                embedding_cache_dir=args.embedding_cache_dir,
-                embedding_model_cache_dir=args.embedding_model_cache_dir,
-                chunk_size=80,
-            )
-            semantic_errors = validate_manifest(semantic_pack, semantic_manifest)
-            if semantic_manifest["relationship_strategy"] != "hybrid_reference_tfidf_embedding":
-                semantic_errors.append("semantic_relationship_strategy")
-            if semantic_errors:
-                failures.extend(f"semantic:{item}" for item in semantic_errors)
-                print(f"[semantic] FAIL {semantic_errors}")
-            else:
-                print("[semantic] PASS semantic smoke pack validated")
-
         if failures:
             print("\nRelease gates failed:")
             for failure in failures:
@@ -161,11 +117,6 @@ def _run_pack(
     output_dir: Path,
     chunk_by: str,
     chunk_size: int = 500,
-    enable_semantic: bool = False,
-    semantic_offline: bool = False,
-    embedding_model: str | None = None,
-    embedding_cache_dir: Path | None = None,
-    embedding_model_cache_dir: Path | None = None,
 ) -> dict[str, object]:
     start = time.perf_counter()
     pack_context(
@@ -174,11 +125,6 @@ def _run_pack(
         agents=["codex"],
         chunk_by=chunk_by,
         chunk_size=chunk_size,
-        enable_semantic=enable_semantic,
-        semantic_offline=semantic_offline,
-        embedding_model=embedding_model,
-        embedding_cache_dir=embedding_cache_dir,
-        embedding_model_cache_dir=embedding_model_cache_dir,
     )
     elapsed = time.perf_counter() - start
     _, manifest = load_manifest(output_dir)
@@ -194,6 +140,8 @@ def _report_manifest(
 ) -> None:
     metrics = collect_manifest_metrics(manifest)
     errors = validate_manifest(output_dir, manifest)
+    if manifest["relationship_strategy"] != "hybrid_reference_tfidf_embedding":
+        errors.append("semantic_relationship_strategy")
     if errors:
         failures.extend(f"{name}:{item}" for item in errors)
     print(
